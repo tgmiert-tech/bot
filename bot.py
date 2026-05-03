@@ -604,7 +604,6 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
     user_id = update.effective_user.id
     if not is_admin(user_id):
         await update.message.reply_text("⛔ У вас нет прав!")
