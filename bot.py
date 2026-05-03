@@ -757,7 +757,4 @@ def main():
     application.add_handler(MessageHandler(filters.Regex('^📈 Статистика$'), show_statistics))
     
     print("✅ БОТ ЗАПУЩЕН!")
-    application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
+    application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True, pool_timeout=1)
