@@ -8,7 +8,7 @@ from telegram.constants import ParseMode
 BOT_TOKEN = "8226025643:AAHyrVkbV8wFum7tLbAxvhtRq5Sh_-VkH-M"
 OWNER_IDS = [287265398, 7396843811]
 ADMIN_IDS = [287265398, 7396843811]
-MODER_IDS = []  # Добавлять ID модераторов сюда
+MODER_IDS = []
 CHANNEL_ID = -1003911175144
 CHANNEL_LINK = "https://t.me/mirokfame"
 SITE_LINK = "https://example.com"
@@ -385,13 +385,18 @@ async def app_acquaintances(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update.message.text
     )
     
-    kb = get_owner_keyboard() if is_owner(user.id) else get_admin_keyboard() if is_admin(user.id) or is_moder(user.id) else get_user_keyboard()
+    if is_owner(user.id):
+        kb = get_owner_keyboard()
+    elif is_staff(user.id):
+        kb = get_admin_keyboard()
+    else:
+        kb = get_user_keyboard()
     
     if app_id:
         await update.message.reply_text(f"✅ <b>Заявка #{app_id} отправлена!</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
-        for admin_id in ADMIN_IDS + MODER_IDS:
+        for uid in ADMIN_IDS + MODER_IDS:
             try:
-                await context.bot.send_message(admin_id, f"🔔 Новая заявка #{app_id} от {data['nickname']}")
+                await context.bot.send_message(uid, f"🔔 Новая заявка #{app_id} от {data['nickname']}")
             except:
                 pass
     
@@ -442,7 +447,7 @@ async def accept_app(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     if not is_admin(query.from_user.id):
-        await query.message.reply_text("⛔ Только админы могут принимать заявки!")
+        await query.answer("⛔ Только админы могут принимать заявки!", show_alert=True)
         return
     
     app_id = int(query.data.split("_")[1])
@@ -465,7 +470,7 @@ async def reject_app_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     if not is_admin(query.from_user.id):
-        await query.message.reply_text("⛔ Только админы могут отклонять заявки!")
+        await query.answer("⛔ Только админы могут отклонять заявки!", show_alert=True)
         return ConversationHandler.END
     
     context.user_data['reject_app_id'] = int(query.data.split("_")[1])
@@ -636,7 +641,13 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except:
             pass
     
-    kb = get_owner_keyboard() if is_owner(user_id) else get_admin_keyboard() if is_staff(user_id) else get_user_keyboard()
+    if is_owner(user_id):
+        kb = get_owner_keyboard()
+    elif is_staff(user_id):
+        kb = get_admin_keyboard()
+    else:
+        kb = get_user_keyboard()
+    
     await update.message.reply_text("✅ Жалоба отправлена!", reply_markup=kb)
     return ConversationHandler.END
 
@@ -659,7 +670,13 @@ async def ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
     
-    kb = get_owner_keyboard() if is_owner(user.id) else get_admin_keyboard() if is_staff(user.id) else get_user_keyboard()
+    if is_owner(user.id):
+        kb = get_owner_keyboard()
+    elif is_staff(user.id):
+        kb = get_admin_keyboard()
+    else:
+        kb = get_user_keyboard()
+    
     await update.message.reply_text("✅ Отправлено!", reply_markup=kb)
     return ConversationHandler.END
 
