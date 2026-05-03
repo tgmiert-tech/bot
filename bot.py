@@ -773,7 +773,26 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = get_admin_keyboard() if is_admin(user_id) else get_user_keyboard()
     await update.message.reply_text("❌ Действие отменено.", reply_markup=kb)
     return ConversationHandler.END
-
+async def show_users_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает количество пользователей бота"""
+    user_id = update.effective_user.id
+    
+    if not is_admin(user_id):
+        await update.message.reply_text("⛔ У вас нет прав!")
+        return
+    
+    try:
+        users = db.get_all_users()
+        total_users = len(users)
+        
+        await update.message.reply_text(
+            f"👥 <b>СТАТИСТИКА БОТА</b>\n\n"
+            f"📊 Всего пользователей: <b>{total_users}</b>\n"
+            f"🆔 ID пользователей: {', '.join(map(str, users[:10]))}{'...' if len(users) > 10 else ''}",
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка при получении статистики: {e}")
 
 def main():
     print("🚀 БОТ ЗАПУСКАЕТСЯ...")
