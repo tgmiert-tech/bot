@@ -775,27 +775,27 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     print("🚀 БОТ ЗАПУСКАЕТСЯ...")
     
-    app = Application.builder().token(BOT_TOKEN).build()
-    
-
-    app.add_error_handler(error_handler)
-    
- 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("cancel", cancel))
+    application = Application.builder().token(BOT_TOKEN).build()
     
    
-    app.add_handler(MessageHandler(filters.Regex('^🌐 Перейти на сайт$'), site_link))
-    app.add_handler(MessageHandler(filters.Regex('^🎯 ArictoSession$'), aricto_session))
-    app.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
-    app.add_handler(MessageHandler(filters.Regex('^📊 Заявки$'), show_applications))
-    app.add_handler(MessageHandler(filters.Regex('^📜 История$'), show_history))
+    application.add_error_handler(error_handler)
     
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("cancel", cancel))
     
-    app.add_handler(ConversationHandler(
+
+    application.add_handler(MessageHandler(filters.Regex('^🌐 Перейти на сайт$'), site_link))
+    application.add_handler(MessageHandler(filters.Regex('^🎯 ArictoSession$'), aricto_session))
+    application.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
+    application.add_handler(MessageHandler(filters.Regex('^📊 Заявки$'), show_applications))
+    application.add_handler(MessageHandler(filters.Regex('^📜 История$'), show_history))
+    
+
+    application.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application)],
         states={
-APP_AVATAR: [MessageHandler(filters.PHOTO, app_avatar)],
+            APP_AVATAR: [MessageHandler(filters.PHOTO, app_avatar)],
             APP_NICKNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_nickname)],
             APP_PROJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_project)],
             APP_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_chat)],
@@ -806,12 +806,10 @@ APP_AVATAR: [MessageHandler(filters.PHOTO, app_avatar)],
             APP_ACQUAINTANCES: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_acquaintances)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        name="application_conversation",
-        persistent=False
     ))
     
-    
-    app.add_handler(ConversationHandler(
+
+    application.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^⚠️ Пожаловаться$'), complaint_start)],
         states={
             COMPLAINT_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_user)],
@@ -823,60 +821,57 @@ APP_AVATAR: [MessageHandler(filters.PHOTO, app_avatar)],
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        name="complaint_conversation",
-        persistent=False
     ))
     
-   
-    app.add_handler(ConversationHandler(
+
+    application.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^🎫 Тикет$'), ticket_start)],
         states={
             TICKET_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ticket_finish)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        name="ticket_conversation",
-        persistent=False
     ))
     
-    
-    app.add_handler(ConversationHandler(
+  
+    application.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(add_note_start, pattern="^note_")],
         states={
             ADD_NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_note_finish)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        name="note_conversation",
-        persistent=False
     ))
     
-   
-    app.add_handler(ConversationHandler(
+ 
+    application.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(reject_app_start, pattern="^reject_")],
         states={
             REJECT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, reject_app_finish)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        name="reject_conversation",
-        persistent=False
     ))
     
-   
-    app.add_handler(ConversationHandler(
+
+    application.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^📨 Рассылка$'), broadcast_start)],
         states={
             BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_send)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        name="broadcast_conversation",
-        persistent=False
     ))
     
     
-    app.add_handler(CallbackQueryHandler(view_application, pattern="^view_"))
-    app.add_handler(CallbackQueryHandler(accept_app, pattern="^accept_"))
+    application.add_handler(CallbackQueryHandler(view_application, pattern="^view_"))
+    application.add_handler(CallbackQueryHandler(accept_app, pattern="^accept_"))
     
-    print("✅ БОТ ЗАПУЩЕН И ГОТОВ К РАБОТЕ!")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-if __name__ == "__main__":
-    main()
+    if os.environ.get('RAILWAY_ENVIRONMENT'):
+        PORT = int(os.environ.get('PORT', 8080))
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            webhook_url=f"https://{os.environ.get('RAILWAY_PUBLIC_DOMAIN')}"
+        )
+        print(f"✅ Бот запущен на Railway")
+    else:
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        print("✅ Бот запущен локально")
