@@ -665,7 +665,6 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
     await update.message.reply_text("⚠️ Укажите username или ссылку на нарушителя:")
     return COMPLAINT_USER
 
