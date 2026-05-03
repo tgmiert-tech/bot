@@ -308,9 +308,10 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     user_id = update.effective_user.id
     username = update.effective_user.username
-    context.user_data.clear()
+    db.add_user(user_id, username)
     
     db.add_user(user_id, username)
     
@@ -347,8 +348,9 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     user_id = update.effective_user.id
-    context.user_data.clear()  
+    for app in db.get_pending_applications():
     
   
     for app in db.get_pending_applications():
@@ -607,6 +609,7 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     user_id = update.effective_user.id
     if not is_admin(user_id):
         await update.message.reply_text("⛔ У вас нет прав!")
@@ -667,7 +670,7 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()  
+    context.user_data.clear()
     await update.message.reply_text("⚠️ Укажите username или ссылку на нарушителя:")
     return COMPLAINT_USER
 
