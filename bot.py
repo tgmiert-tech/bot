@@ -308,7 +308,6 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
     user_id = update.effective_user.id
     username = update.effective_user.username
     db.add_user(user_id, username)
