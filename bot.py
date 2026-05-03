@@ -794,17 +794,14 @@ def main():
     
     application = Application.builder().token(BOT_TOKEN).build()
     
-  
     application.add_error_handler(error_handler)
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("cancel", cancel))
     
-    
     application.add_handler(CallbackQueryHandler(view_application, pattern="^view_"))
     application.add_handler(CallbackQueryHandler(accept_app, pattern="^accept_"))
     
-   
     application.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(add_note_start, pattern="^note_")],
         states={
@@ -813,7 +810,6 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     ))
     
-  
     application.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(reject_app_start, pattern="^reject_")],
         states={
@@ -822,7 +818,6 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     ))
     
-  
     application.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application)],
         states={
@@ -839,7 +834,6 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     ))
     
-   
     application.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^⚠️ Пожаловаться$'), complaint_start)],
         states={
@@ -854,7 +848,6 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     ))
     
-   
     application.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^🎫 Тикет$'), ticket_start)],
         states={
@@ -863,7 +856,6 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     ))
     
-   
     application.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^📨 Рассылка$'), broadcast_start)],
         states={
@@ -872,14 +864,12 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     ))
     
-    
     application.add_handler(MessageHandler(filters.Regex('^🌐 Перейти на сайт$'), site_link))
     application.add_handler(MessageHandler(filters.Regex('^🎯 ArictoSession$'), aricto_session))
     application.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
     application.add_handler(MessageHandler(filters.Regex('^📊 Заявки$'), show_applications))
     application.add_handler(MessageHandler(filters.Regex('^📜 История$'), show_history))
     application.add_handler(MessageHandler(filters.Regex('^👥 Пользователи$'), show_users_count))
-    
     
     print("✅ БОТ ЗАПУЩЕН И ГОТОВ К РАБОТЕ!")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
