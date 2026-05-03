@@ -326,15 +326,11 @@ def format_application(app):
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Ошибка: {context.error}")
-    if update and update.effective_message:
-        try:
-            await update.effective_message.reply_text("❌ Произошла ошибка. Попробуйте снова.")
-        except:
-            pass
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     username = update.effective_user.username
+    
     db.add_user(user_id, username)
     
     if not await check_subscription(context.bot, user_id):
@@ -352,12 +348,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✨ Добро пожаловать в Aricto Fame!", reply_markup=get_user_keyboard())
 
 async def site_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db.add_user(update.effective_user.id, update.effective_user.username)
     await update.message.reply_text(f"🌐 Наш сайт: {SITE_LINK}")
 
 async def aricto_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db.add_user(update.effective_user.id, update.effective_user.username)
     await update.message.reply_text("🎯 Чтобы попасть в ArictoSession, напишите владельцу: @faymovy")
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db.add_user(update.effective_user.id, update.effective_user.username)
     await update.message.reply_text(
         "📜 <b>ПРАВИЛА:</b>\n\n"
         "1. Заполняйте анкету честно\n"
@@ -370,6 +369,7 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    db.add_user(user_id, update.effective_user.username)
     
     for app in db.get_pending_applications():
         if app[1] == user_id:
@@ -704,6 +704,7 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db.add_user(update.effective_user.id, update.effective_user.username)
     await update.message.reply_text("⚠️ Укажите username или ссылку на нарушителя:")
     return COMPLAINT_USER
 
@@ -764,6 +765,7 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 async def ticket_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    db.add_user(update.effective_user.id, update.effective_user.username)
     await update.message.reply_text("🎫 Задайте ваш вопрос администрации:")
     return TICKET_QUESTION
 
