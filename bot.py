@@ -332,56 +332,72 @@ async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return APP_AVATAR
 
 async def app_avatar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.photo:
-        await update.message.reply_text("❌ Отправьте фото!")
+    if not update.message or not update.message.photo:
         return APP_AVATAR
     context.user_data['avatar'] = update.message.photo[-1].file_id
     await update.message.reply_text("✏️ Введите никнейм:")
     return APP_NICKNAME
 
 async def app_nickname(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return APP_NICKNAME
     context.user_data['nickname'] = update.message.text
     await update.message.reply_text("🔗 Ссылка на проект:")
     return APP_PROJECT
 
 async def app_project(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return APP_PROJECT
     context.user_data['project'] = update.message.text
     await update.message.reply_text("💬 Ссылка на чат (или '-'):")
     return APP_CHAT
 
 async def app_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return APP_CHAT
     context.user_data['chat_link'] = None if update.message.text == '-' else update.message.text
     await update.message.reply_text("📅 Год в КМ:")
     return APP_KM_YEAR
 
 async def app_km_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return APP_KM_YEAR
     context.user_data['km_year'] = update.message.text
     await update.message.reply_text("🎯 Участие в ВК/ДС КМ?")
     return APP_PARTICIPATED
 
 async def app_participated(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return APP_PARTICIPATED
     context.user_data['participated'] = update.message.text
     await update.message.reply_text("💭 Почему к нам? (или '-'):")
     return APP_REASON
 
 async def app_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return APP_REASON
     context.user_data['reason'] = None if update.message.text == '-' else update.message.text
     await update.message.reply_text("📈 Как поднимали фейм?")
     return APP_FAME_METHOD
 
 async def app_fame_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return APP_FAME_METHOD
     context.user_data['fame_method'] = update.message.text
     await update.message.reply_text("👥 С кем знакомы?")
     return APP_ACQUAINTANCES
 
 async def app_acquaintances(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return APP_ACQUAINTANCES
+    
     user = update.effective_user
     data = context.user_data
     
     app_id = db.add_application(
-        user.id, user.username, data['nickname'], data['avatar'],
-        data['project'], data.get('chat_link'), data['km_year'],
-        data['participated'], data.get('reason'), data['fame_method'],
+        user.id, user.username, data.get('nickname'), data.get('avatar'),
+        data.get('project'), data.get('chat_link'), data.get('km_year'),
+        data.get('participated'), data.get('reason'), data.get('fame_method'),
         update.message.text
     )
     
@@ -396,7 +412,7 @@ async def app_acquaintances(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ <b>Заявка #{app_id} отправлена!</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
         for uid in ADMIN_IDS + MODER_IDS:
             try:
-                await context.bot.send_message(uid, f"🔔 Новая заявка #{app_id} от {data['nickname']}")
+                await context.bot.send_message(uid, f"🔔 Новая заявка #{app_id} от {data.get('nickname')}")
             except:
                 pass
     
@@ -610,11 +626,15 @@ async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return COMPLAINT_USER
 
 async def complaint_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return COMPLAINT_USER
     context.user_data['complaint_on'] = update.message.text
     await update.message.reply_text("📝 Причина:")
     return COMPLAINT_REASON
 
 async def complaint_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return COMPLAINT_REASON
     context.user_data['complaint_reason'] = update.message.text
     await update.message.reply_text("📎 Доказательства:")
     return COMPLAINT_EVIDENCE
@@ -626,11 +646,11 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     
     evidence = "Не предоставлены"
-    if update.message.text:
+    if update.message and update.message.text:
         evidence = update.message.text
-    elif update.message.photo:
+    elif update.message and update.message.photo:
         evidence = f"Фото"
-    elif update.message.video:
+    elif update.message and update.message.video:
         evidence = f"Видео"
     
     db.add_complaint(user_id, context.user_data['complaint_on'], context.user_data['complaint_reason'], evidence)
@@ -661,6 +681,9 @@ async def ticket_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return TICKET_QUESTION
 
 async def ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return TICKET_QUESTION
+    
     user = update.effective_user
     db.add_ticket(user.id, user.username, update.message.text)
     
