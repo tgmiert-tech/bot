@@ -732,7 +732,6 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def ticket_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
     await update.message.reply_text("🎫 Задайте ваш вопрос администрации:")
     return TICKET_QUESTION
 
