@@ -346,7 +346,6 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
     user_id = update.effective_user.id
     for app in db.get_pending_applications():
     
