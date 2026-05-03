@@ -1,22 +1,21 @@
 import sqlite3
 import logging
+import os
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 from telegram.constants import ParseMode
-
 
 BOT_TOKEN = "8226025643:AAHyrVkbV8wFum7tLbAxvhtRq5Sh_-VkH-M"
 OWNER_IDS = [287265398, 7396843811]
 ADMIN_IDS = [287265398, 7396843811]
 CHANNEL_ID = -1003911175144
 CHANNEL_LINK = "https://t.me/mirokfame"
-SITE_LINK = "https://релиза пока не было"  
+SITE_LINK = "https://example.com"
 CHECK_SUBSCRIPTION = True
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
 
 class Database:
     def __init__(self, db_file="bot_data.db"):
@@ -87,7 +86,6 @@ class Database:
         
         conn.commit()
         conn.close()
-        logger.info("База данных инициализирована")
     
     def add_user(self, user_id, username):
         conn = sqlite3.connect(self.db_file, timeout=10)
@@ -104,6 +102,51 @@ class Database:
         users = [row[0] for row in cursor.fetchall()]
         conn.close()
         return users
+    
+    def get_statistics(self):
+        conn = sqlite3.connect(self.db_file, timeout=10)
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT COUNT(*) FROM users')
+        total_users = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM applications')
+        total_apps = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM applications WHERE status = "pending"')
+        pending_apps = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM applications WHERE status = "accepted"')
+        accepted_apps = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM applications WHERE status = "rejected"')
+        rejected_apps = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM complaints')
+        total_complaints = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM tickets')
+        total_tickets = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM complaints WHERE status = "pending"')
+        pending_complaints = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM tickets WHERE status = "open"')
+        open_tickets = cursor.fetchone()[0]
+        
+        conn.close()
+        
+        return {
+            'total_users': total_users,
+            'total_apps': total_apps,
+            'pending_apps': pending_apps,
+            'accepted_apps': accepted_apps,
+            'rejected_apps': rejected_apps,
+            'total_complaints': total_complaints,
+            'total_tickets': total_tickets,
+            'pending_complaints': pending_complaints,
+            'open_tickets': open_tickets
+        }
     
     def add_application(self, user_id, username, nickname, avatar_file_id, 
                         project, chat_link, km_year, participated_before, 
@@ -202,7 +245,6 @@ class Database:
 
 db = Database()
 
-
 def get_user_keyboard():
     return ReplyKeyboardMarkup([
         ["🌐 Перейти на сайт", "📝 Отправить заявку"],
@@ -218,7 +260,7 @@ def get_admin_keyboard():
         ["📋 Правила", "⚠️ Пожаловаться"],
         ["🎫 Тикет"],
         ["📊 Заявки", "📜 История"],
-        ["📨 Рассылка", "👥 Пользователи"]
+        ["📨 Рассылка", "📈 Статистика"]
     ], resize_keyboard=True)
 
 def get_app_view_keyboard(app_id):
@@ -236,16 +278,10 @@ def get_apps_list_keyboard(apps):
         keyboard.append([InlineKeyboardButton(f"👤 {app[3]} | #{app[0]}", callback_data=f"view_{app[0]}")])
     return InlineKeyboardMarkup(keyboard)
 
-
 (APP_AVATAR, APP_NICKNAME, APP_PROJECT, APP_CHAT, APP_KM_YEAR, 
  APP_PARTICIPATED, APP_REASON, APP_FAME_METHOD, APP_ACQUAINTANCES) = range(9)
-
-
 (COMPLAINT_USER, COMPLAINT_REASON, COMPLAINT_EVIDENCE) = range(9, 12)
-
-# Админские
 (ADD_NOTE, REJECT_REASON, BROADCAST_MESSAGE, TICKET_QUESTION) = range(12, 16)
-
 
 async def check_subscription(bot, user_id):
     if not CHECK_SUBSCRIPTION:
@@ -288,22 +324,11 @@ def format_application(app):
 ⏰ <b>Создана:</b> {app[13]}
 """
 
-
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Ошибка: {context.error}")
-    
-   
     if update and update.effective_message:
-        user_id = update.effective_user.id
-        context.user_data.clear()
-        
-        kb = get_admin_keyboard() if is_admin(user_id) else get_user_keyboard()
-        
         try:
-            await update.effective_message.reply_text(
-                "❌ Произошла ошибка. Попробуйте снова.",
-                reply_markup=kb
-            )
+            await update.effective_message.reply_text("❌ Произошла ошибка. Попробуйте снова.")
         except:
             pass
 
@@ -343,10 +368,8 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.HTML
     )
 
-
 async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    for app in db.get_pending_applications():
     
     for app in db.get_pending_applications():
         if app[1] == user_id:
@@ -373,6 +396,7 @@ async def app_project(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['project'] = update.message.text
     await update.message.reply_text("💬 Введите ссылку на ваш чат (или напишите '-' если нет):")
     return APP_CHAT
+
 async def app_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     context.user_data['chat_link'] = None if text == '-' else text
@@ -419,7 +443,6 @@ async def app_acquaintances(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.HTML, reply_markup=kb
     )
     
-   
     for admin_id in ADMIN_IDS:
         try:
             await context.bot.send_message(
@@ -432,9 +455,7 @@ async def app_acquaintances(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
     
-    context.user_data.clear()
     return ConversationHandler.END
-
 
 async def show_applications(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -465,7 +486,7 @@ async def view_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = format_application(app)
     
-    if app[4]:  
+    if app[4]:
         await query.message.reply_photo(
             photo=app[4], 
             caption=text, 
@@ -493,7 +514,6 @@ async def accept_app(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     db.update_application_status(app_id, 'accepted', admin_id)
-    
     
     try:
         await context.bot.send_message(
@@ -529,7 +549,6 @@ async def reject_app_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not app_id:
         await update.message.reply_text("❌ Ошибка: нет ID заявки", reply_markup=get_admin_keyboard())
-        context.user_data.clear()
         return ConversationHandler.END
     
     app = db.get_application_by_id(app_id)
@@ -548,7 +567,6 @@ async def reject_app_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(f"❌ Заявка #{app_id} отклонена.\nПричина: {reason}", 
                                    reply_markup=get_admin_keyboard())
-    context.user_data.clear()
     return ConversationHandler.END
 
 async def add_note_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -573,9 +591,7 @@ async def add_note_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_admin_keyboard()
         )
     
-    context.user_data.clear()
     return ConversationHandler.END
-
 
 async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -601,6 +617,36 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
+async def show_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("⛔ У вас нет прав!")
+        return
+    
+    stats = db.get_statistics()
+    
+    text = f"""
+📈 <b>СТАТИСТИКА БОТА</b>
+
+👥 <b>Пользователи:</b>
+• Всего: {stats['total_users']}
+
+📝 <b>Заявки:</b>
+• Всего: {stats['total_apps']}
+• В ожидании: {stats['pending_apps']}
+• Принято: {stats['accepted_apps']}
+• Отклонено: {stats['rejected_apps']}
+
+⚠️ <b>Жалобы:</b>
+• Всего: {stats['total_complaints']}
+• На рассмотрении: {stats['pending_complaints']}
+
+🎫 <b>Тикеты:</b>
+• Всего: {stats['total_tickets']}
+• Открыто: {stats['open_tickets']}
+"""
+    
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -620,9 +666,7 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = update.message.text
     admin_id = update.effective_user.id
     
-    
     if message_text == '/cancel':
-        context.user_data.clear()
         await update.message.reply_text("❌ Рассылка отменена", reply_markup=get_admin_keyboard())
         return ConversationHandler.END
     
@@ -630,7 +674,6 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not users:
         await update.message.reply_text("❌ Нет пользователей для рассылки", reply_markup=get_admin_keyboard())
-        context.user_data.clear()
         return ConversationHandler.END
     
     await update.message.reply_text(f"📨 Начинаю рассылку на {len(users)} пользователей...")
@@ -658,9 +701,7 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_admin_keyboard()
     )
     
-    context.user_data.clear()
     return ConversationHandler.END
-
 
 async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⚠️ Укажите username или ссылку на нарушителя:")
@@ -679,14 +720,11 @@ async def complaint_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-   
     if 'complaint_on' not in context.user_data or 'complaint_reason' not in context.user_data:
         await update.message.reply_text("❌ Ошибка: данные жалобы потеряны. Начните заново.", 
                                        reply_markup=get_user_keyboard())
-        context.user_data.clear()
         return ConversationHandler.END
     
- 
     evidence = "Не предоставлены"
     if update.message.text:
         evidence = update.message.text
@@ -703,15 +741,13 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
             evidence
         )
         
-        
         for admin_id in ADMIN_IDS:
             try:
                 await context.bot.send_message(
                     admin_id,
                     f"⚠️ <b>НОВАЯ ЖАЛОБА</b>\n"
                     f"👤 Нарушитель: {context.user_data['complaint_on']}\n"
-                    f"📝 Причина: {context.user_data['complaint_reason']}\n"
-                    f"📎 Доказательства: {evidence[:100]}...",
+                    f"📝 Причина: {context.user_data['complaint_reason']}",
                     parse_mode=ParseMode.HTML
                 )
             except:
@@ -725,9 +761,7 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
         kb = get_admin_keyboard() if is_admin(user_id) else get_user_keyboard()
         await update.message.reply_text("❌ Произошла ошибка при отправке жалобы", reply_markup=kb)
     
-    context.user_data.clear()
     return ConversationHandler.END
-
 
 async def ticket_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎫 Задайте ваш вопрос администрации:")
@@ -739,7 +773,6 @@ async def ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     db.add_ticket(user.id, user.username, question)
     
- 
     for admin_id in ADMIN_IDS:
         try:
             await context.bot.send_message(
@@ -754,36 +787,13 @@ async def ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     kb = get_admin_keyboard() if is_admin(user.id) else get_user_keyboard()
     await update.message.reply_text("✅ Ваш вопрос отправлен! Администрация скоро ответит.", reply_markup=kb)
-    context.user_data.clear()
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    context.user_data.clear()
-    
     kb = get_admin_keyboard() if is_admin(user_id) else get_user_keyboard()
     await update.message.reply_text("❌ Действие отменено.", reply_markup=kb)
     return ConversationHandler.END
-async def show_users_count(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает количество пользователей бота"""
-    user_id = update.effective_user.id
-    
-    if not is_admin(user_id):
-        await update.message.reply_text("⛔ У вас нет прав!")
-        return
-    
-    try:
-        users = db.get_all_users()
-        total_users = len(users)
-        
-        await update.message.reply_text(
-            f"👥 <b>СТАТИСТИКА БОТА</b>\n\n"
-            f"📊 Всего пользователей: <b>{total_users}</b>\n"
-            f"🆔 ID пользователей: {', '.join(map(str, users[:10]))}{'...' if len(users) > 10 else ''}",
-            parse_mode=ParseMode.HTML
-        )
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка при получении статистики: {e}")
 
 def main():
     print("🚀 БОТ ЗАПУСКАЕТСЯ...")
@@ -865,7 +875,10 @@ def main():
     application.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
     application.add_handler(MessageHandler(filters.Regex('^📊 Заявки$'), show_applications))
     application.add_handler(MessageHandler(filters.Regex('^📜 История$'), show_history))
-    application.add_handler(MessageHandler(filters.Regex('^👥 Пользователи$'), show_users_count))
+    application.add_handler(MessageHandler(filters.Regex('^📈 Статистика$'), show_statistics))
     
     print("✅ БОТ ЗАПУЩЕН И ГОТОВ К РАБОТЕ!")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
