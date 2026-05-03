@@ -795,7 +795,7 @@ def main():
     app.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application)],
         states={
-            APP_AVATAR: [MessageHandler(filters.PHOTO, app_avatar)],
+APP_AVATAR: [MessageHandler(filters.PHOTO, app_avatar)],
             APP_NICKNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_nickname)],
             APP_PROJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_project)],
             APP_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_chat)],
