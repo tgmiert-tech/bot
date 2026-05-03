@@ -218,7 +218,7 @@ def get_admin_keyboard():
         ["📋 Правила", "⚠️ Пожаловаться"],
         ["🎫 Тикет"],
         ["📊 Заявки", "📜 История"],
-        ["📨 Рассылка"]
+        ["📨 Рассылка", "👥 Пользователи"]
     ], resize_keyboard=True)
 
 def get_app_view_keyboard(app_id):
@@ -812,7 +812,7 @@ def main():
     application.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
     application.add_handler(MessageHandler(filters.Regex('^📊 Заявки$'), show_applications))
     application.add_handler(MessageHandler(filters.Regex('^📜 История$'), show_history))
-    
+    application.add_handler(MessageHandler(filters.Regex('^👥 Пользователи$'), show_users_count))  
 
     application.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application)],
