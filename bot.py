@@ -313,8 +313,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
     db.add_user(user_id, username)
     
-    db.add_user(user_id, username)
-    
     if not await check_subscription(context.bot, user_id):
         await update.message.reply_text(
             f"❌ <b>Для использования бота подпишитесь на канал!</b>\n\n"
@@ -350,9 +348,7 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     user_id = update.effective_user.id
-    for app in db.get_pending_applications():
     
-  
     for app in db.get_pending_applications():
         if app[1] == user_id:
             await update.message.reply_text("❌ У вас уже есть активная заявка! Дождитесь решения.")
@@ -378,7 +374,6 @@ async def app_project(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['project'] = update.message.text
     await update.message.reply_text("💬 Введите ссылку на ваш чат (или напишите '-' если нет):")
     return APP_CHAT
-
 async def app_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     context.user_data['chat_link'] = None if text == '-' else text
