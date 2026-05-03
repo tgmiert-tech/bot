@@ -11,7 +11,7 @@ OWNER_IDS = [287265398, 7396843811]
 ADMIN_IDS = [287265398, 7396843811]
 CHANNEL_ID = -1003911175144
 CHANNEL_LINK = "https://t.me/mirokfame"
-SITE_LINK = "https://example.com"  # ПОМЕНЯЙТЕ НА РЕАЛЬНУЮ ССЫЛКУ
+SITE_LINK = "https://релиза пока не было"  
 CHECK_SUBSCRIPTION = True
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
