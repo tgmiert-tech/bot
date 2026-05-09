@@ -2,11 +2,11 @@ import sqlite3
 import logging
 import os
 import asyncio
+import traceback
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 from telegram.constants import ParseMode
-
 
 BOT_TOKEN = "8226025643:AAHyrVkbV8wFum7tLbAxvhtRq5Sh_-VkH-M"
 OWNER_IDS = [287265398, 7396843811]
@@ -20,14 +20,13 @@ CHECK_SUBSCRIPTION = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-
 (APP_AVATAR, APP_NICKNAME, APP_PROJECT, APP_CHAT, APP_KM_YEAR,
  APP_PARTICIPATED, APP_REASON, APP_FAME_METHOD, APP_ACQUAINTANCES) = range(9)
 
 (COMPLAINT_USER, COMPLAINT_REASON, COMPLAINT_EVIDENCE) = range(9, 12)
 
 (ADD_NOTE, REJECT_REASON, BROADCAST_MESSAGE, TICKET_QUESTION, 
- ANSWER_TICKET, ANSWER_COMPLAINT, ADD_MODER) = range(12, 19)
+ ANSWER_TICKET, ANSWER_COMPLAINT) = range(12, 18)
 
 class Database:
     def __init__(self, db_file="bot_data.db"):
@@ -38,12 +37,13 @@ class Database:
     def get_connection(self):
         if self.conn is None:
             self.conn = sqlite3.connect(self.db_file, timeout=10, check_same_thread=False)
+            self.conn.execute("PRAGMA journal_mode=WAL")
+            self.conn.execute("PRAGMA synchronous=NORMAL")
         return self.conn
 
     def init_db(self):
         conn = self.get_connection()
         cursor = conn.cursor()
-
         cursor.execute('''CREATE TABLE IF NOT EXISTS applications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -64,7 +64,6 @@ class Database:
             reject_reason TEXT,
             admin_notes TEXT DEFAULT ''
         )''')
-
         cursor.execute('''CREATE TABLE IF NOT EXISTS history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             application_id INTEGER,
@@ -76,7 +75,6 @@ class Database:
             reason TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
-
         cursor.execute('''CREATE TABLE IF NOT EXISTS complaints (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             from_user_id INTEGER,
@@ -88,7 +86,6 @@ class Database:
             admin_response TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
-
         cursor.execute('''CREATE TABLE IF NOT EXISTS tickets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -98,22 +95,18 @@ class Database:
             admin_response TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
-
         cursor.execute('''CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
-
         cursor.execute('''CREATE TABLE IF NOT EXISTS moders (
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             added_by INTEGER,
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
-
         conn.commit()
-        # Загружаем модераторов из БД
         self.load_moders()
         logger.info("База данных инициализирована")
 
@@ -502,29 +495,11 @@ def format_ticket(ticket):
 ⏰ <b>Создан:</b> {ticket[6]}
 """
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.error(f"Ошибка: {context.error}", exc_info=True)
-    try:
-        if update and update.effective_message:
-            context.user_data.clear()
-            user_id = update.effective_user.id
-            kb = get_user_keyboard()
-            if is_owner(user_id):
-                kb = get_owner_keyboard()
-            elif is_admin(user_id):
-                kb = get_admin_keyboard()
-            elif is_moder(user_id):
-                kb = get_moder_keyboard()
-            await update.effective_message.reply_text("❌ Произошла ошибка. Попробуйте снова.", reply_markup=kb)
-    except:
-        pass
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     user_id = update.effective_user.id
     username = update.effective_user.username
     db.add_user(user_id, username)
-
     if not await check_subscription(context.bot, user_id):
         await update.message.reply_text(
             f"❌ <b>Для использования бота подпишитесь на канал!</b>\n\n"
@@ -533,7 +508,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.HTML, disable_web_page_preview=True
         )
         return
-
     if is_owner(user_id):
         await update.message.reply_text("👑 Панель владельца активирована!", reply_markup=get_owner_keyboard())
     elif is_admin(user_id):
@@ -589,6 +563,13 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     user_id = update.effective_user.id
+    if not await check_subscription(context.bot, user_id):
+        await update.message.reply_text(
+            f"❌ <b>Для подачи заявки подпишитесь на канал!</b>\n\n"
+            f"👉 <a href='{CHANNEL_LINK}'>ПОДПИСАТЬСЯ</a>",
+            parse_mode=ParseMode.HTML, disable_web_page_preview=True
+        )
+        return ConversationHandler.END
     if db.get_user_applications_count(user_id) > 0:
         await update.message.reply_text("❌ У вас уже есть активная заявка!")
         return ConversationHandler.END
@@ -673,6 +654,8 @@ async def show_applications(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = get_apps_list_keyboard(apps)
     if kb:
         await update.message.reply_text("📊 <b>Активные заявки:</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
+    else:
+        await update.message.reply_text("📭 Нет активных заявок.")
 
 async def view_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -691,7 +674,8 @@ async def view_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_photo(photo=app[4], caption=text, parse_mode=ParseMode.HTML, reply_markup=get_app_view_keyboard(app_id, user_id))
         else:
             await query.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=get_app_view_keyboard(app_id, user_id))
-    except:
+    except Exception as e:
+        logger.error(f"view_application error: {e}")
         await query.message.reply_text("❌ Ошибка при загрузке заявки")
     try:
         await query.message.delete()
@@ -715,17 +699,16 @@ async def accept_app(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
         await query.message.reply_text(f"✅ Заявка #{app_id} принята!")
-    except:
-        await query.message.reply_text("❌ Ошибка")
-    try:
         await query.message.delete()
-    except:
-        pass
+    except Exception as e:
+        logger.error(f"accept_app error: {e}")
+        await query.message.reply_text("❌ Ошибка")
 
 async def reject_app_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if not is_admin(query.from_user.id):
+        await query.message.reply_text("⛔ Нет прав!")
         return ConversationHandler.END
     try:
         app_id = int(query.data.split("_")[1])
@@ -739,10 +722,10 @@ async def reject_app_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reason = update.message.text
     admin_id = update.effective_user.id
     app_id = context.user_data.get('reject_app_id')
+    context.user_data.clear()
     if not app_id:
         kb = get_admin_keyboard() if is_admin(admin_id) else get_moder_keyboard()
-        await update.message.reply_text("❌ Ошибка", reply_markup=kb)
-        context.user_data.clear()
+        await update.message.reply_text("❌ Ошибка: заявка не найдена", reply_markup=kb)
         return ConversationHandler.END
     app = db.get_application_by_id(app_id)
     if app:
@@ -753,13 +736,13 @@ async def reject_app_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
     kb = get_admin_keyboard() if is_admin(admin_id) else get_moder_keyboard()
     await update.message.reply_text(f"❌ Заявка #{app_id} отклонена.", reply_markup=kb)
-    context.user_data.clear()
     return ConversationHandler.END
 
 async def add_note_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if not has_access(query.from_user.id):
+        await query.message.reply_text("⛔ Нет прав!")
         return ConversationHandler.END
     try:
         app_id = int(query.data.split("_")[1])
@@ -773,11 +756,11 @@ async def add_note_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     note_text = update.message.text
     admin = update.effective_user
     app_id = context.user_data.get('note_app_id')
+    context.user_data.clear()
     if app_id:
         db.add_admin_note(app_id, admin.id, admin.username or "Без username", note_text)
         kb = get_admin_keyboard() if is_admin(admin.id) else get_moder_keyboard()
         await update.message.reply_text(f"✅ Заметка добавлена к заявке #{app_id}", reply_markup=kb)
-    context.user_data.clear()
     return ConversationHandler.END
 
 async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -819,21 +802,29 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Нет пользователей", reply_markup=get_admin_keyboard())
         context.user_data.clear()
         return ConversationHandler.END
-    await update.message.reply_text(f"📨 Рассылка на {len(users)} пользователей...")
+    status_msg = await update.message.reply_text(f"📨 Рассылка на {len(users)} пользователей...")
     success, failed = 0, 0
     for user_id in users:
         try:
             await context.bot.send_message(user_id, f"📢 <b>Сообщение от администрации:</b>\n\n{message_text}", parse_mode=ParseMode.HTML)
             success += 1
-            await asyncio.sleep(0.05)
         except:
             failed += 1
-    await update.message.reply_text(f"📊 <b>Рассылка завершена!</b>\n\n✅ {success}\n❌ {failed}", parse_mode=ParseMode.HTML, reply_markup=get_admin_keyboard())
+        await asyncio.sleep(0.03)
+    await status_msg.edit_text(f"📊 <b>Рассылка завершена!</b>\n\n✅ {success}\n❌ {failed}", parse_mode=ParseMode.HTML)
+    await update.message.reply_text("✅ Готово", reply_markup=get_admin_keyboard())
     context.user_data.clear()
     return ConversationHandler.END
 
 async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
+    if not await check_subscription(context.bot, update.effective_user.id):
+        await update.message.reply_text(
+            f"❌ <b>Для подачи жалобы подпишитесь на канал!</b>\n\n"
+            f"👉 <a href='{CHANNEL_LINK}'>ПОДПИСАТЬСЯ</a>",
+            parse_mode=ParseMode.HTML, disable_web_page_preview=True
+        )
+        return ConversationHandler.END
     await update.message.reply_text("⚠️ Укажите username или ссылку на нарушителя:")
     return COMPLAINT_USER
 
@@ -851,12 +842,12 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = update.effective_user.id
     username = update.effective_user.username
     if 'complaint_on' not in context.user_data:
+        context.user_data.clear()
         kb = get_user_keyboard()
         if is_owner(user_id): kb = get_owner_keyboard()
         elif is_admin(user_id): kb = get_admin_keyboard()
         elif is_moder(user_id): kb = get_moder_keyboard()
         await update.message.reply_text("❌ Ошибка", reply_markup=kb)
-        context.user_data.clear()
         return ConversationHandler.END
     evidence = "Не предоставлены"
     if update.message.text:
@@ -865,21 +856,17 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
         evidence = f"Фото (file_id: {update.message.photo[-1].file_id})"
     elif update.message.video:
         evidence = f"Видео (file_id: {update.message.video.file_id})"
-    try:
-        complaint_id = db.add_complaint(user_id, username, context.user_data['complaint_on'], context.user_data['complaint_reason'], evidence)
-        for uid in ADMIN_IDS + MODER_IDS:
-            try:
-                await context.bot.send_message(uid, f"⚠️ <b>НОВАЯ ЖАЛОБА #{complaint_id}</b>\n👤 От: @{username or 'нет'}\n👥 Нарушитель: {context.user_data['complaint_on']}\n📝 Причина: {context.user_data['complaint_reason']}", parse_mode=ParseMode.HTML)
-            except:
-                pass
-        kb = get_user_keyboard()
-        if is_owner(user_id): kb = get_owner_keyboard()
-        elif is_admin(user_id): kb = get_admin_keyboard()
-        elif is_moder(user_id): kb = get_moder_keyboard()
-        await update.message.reply_text(f"✅ Жалоба #{complaint_id} отправлена!", reply_markup=kb)
-    except:
-        kb = get_user_keyboard()
-        await update.message.reply_text("❌ Ошибка при отправке", reply_markup=kb)
+    complaint_id = db.add_complaint(user_id, username, context.user_data['complaint_on'], context.user_data['complaint_reason'], evidence)
+    for uid in ADMIN_IDS + MODER_IDS:
+        try:
+            await context.bot.send_message(uid, f"⚠️ <b>НОВАЯ ЖАЛОБА #{complaint_id}</b>\n👤 От: @{username or 'нет'}\n👥 Нарушитель: {context.user_data['complaint_on']}\n📝 Причина: {context.user_data['complaint_reason']}", parse_mode=ParseMode.HTML)
+        except:
+            pass
+    kb = get_user_keyboard()
+    if is_owner(user_id): kb = get_owner_keyboard()
+    elif is_admin(user_id): kb = get_admin_keyboard()
+    elif is_moder(user_id): kb = get_moder_keyboard()
+    await update.message.reply_text(f"✅ Жалоба #{complaint_id} отправлена!", reply_markup=kb)
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -893,6 +880,8 @@ async def show_complaints(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = get_complaints_list_keyboard(complaints)
     if kb:
         await update.message.reply_text("📋 <b>Активные жалобы:</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
+    else:
+        await update.message.reply_text("📭 Нет активных жалоб.")
 
 async def view_complaint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -953,10 +942,10 @@ async def answer_complaint_finish(update: Update, context: ContextTypes.DEFAULT_
     response = update.message.text
     admin = update.effective_user
     complaint_id = context.user_data.get('answer_complaint_id')
+    context.user_data.clear()
     if not complaint_id:
         kb = get_admin_keyboard() if is_admin(admin.id) else get_moder_keyboard()
         await update.message.reply_text("❌ Ошибка", reply_markup=kb)
-        context.user_data.clear()
         return ConversationHandler.END
     complaint = db.get_complaint_by_id(complaint_id)
     if complaint:
@@ -967,11 +956,17 @@ async def answer_complaint_finish(update: Update, context: ContextTypes.DEFAULT_
             pass
     kb = get_admin_keyboard() if is_admin(admin.id) else get_moder_keyboard()
     await update.message.reply_text(f"✅ Ответ на жалобу #{complaint_id} отправлен!", reply_markup=kb)
-    context.user_data.clear()
     return ConversationHandler.END
 
 async def ticket_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
+    if not await check_subscription(context.bot, update.effective_user.id):
+        await update.message.reply_text(
+            f"❌ <b>Для создания тикета подпишитесь на канал!</b>\n\n"
+            f"👉 <a href='{CHANNEL_LINK}'>ПОДПИСАТЬСЯ</a>",
+            parse_mode=ParseMode.HTML, disable_web_page_preview=True
+        )
+        return ConversationHandler.END
     await update.message.reply_text("🎫 Задайте вопрос:")
     return TICKET_QUESTION
 
@@ -1002,6 +997,8 @@ async def show_tickets(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = get_tickets_list_keyboard(tickets)
     if kb:
         await update.message.reply_text("🎫 <b>Открытые тикеты:</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
+    else:
+        await update.message.reply_text("📭 Нет открытых тикетов.")
 
 async def view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1062,10 +1059,10 @@ async def answer_ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYP
     response = update.message.text
     admin = update.effective_user
     ticket_id = context.user_data.get('answer_ticket_id')
+    context.user_data.clear()
     if not ticket_id:
         kb = get_admin_keyboard() if is_admin(admin.id) else get_moder_keyboard()
         await update.message.reply_text("❌ Ошибка", reply_markup=kb)
-        context.user_data.clear()
         return ConversationHandler.END
     ticket = db.get_ticket_by_id(ticket_id)
     if ticket:
@@ -1076,7 +1073,6 @@ async def answer_ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYP
             pass
     kb = get_admin_keyboard() if is_admin(admin.id) else get_moder_keyboard()
     await update.message.reply_text(f"✅ Ответ на тикет #{ticket_id} отправлен!", reply_markup=kb)
-    context.user_data.clear()
     return ConversationHandler.END
 
 async def show_moders(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1137,18 +1133,32 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Действие отменено.", reply_markup=kb)
     return ConversationHandler.END
 
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"Ошибка: {context.error}")
+    logger.error(traceback.format_exc())
+    try:
+        if update and update.effective_message:
+            context.user_data.clear()
+            user_id = update.effective_user.id
+            kb = get_user_keyboard()
+            if is_owner(user_id):
+                kb = get_owner_keyboard()
+            elif is_admin(user_id):
+                kb = get_admin_keyboard()
+            elif is_moder(user_id):
+                kb = get_moder_keyboard()
+            await update.effective_message.reply_text("❌ Произошла ошибка. Попробуйте снова.", reply_markup=kb)
+    except:
+        pass
+
 def main():
     print("🚀 БОТ ЗАПУСКАЕТСЯ...")
-
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_error_handler(error_handler)
-
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("addmoder", add_moder_cmd))
 
-  
     conv_handler = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application),
@@ -1161,7 +1171,6 @@ def main():
             CallbackQueryHandler(answer_ticket_start, pattern="^answer_ticket_"),
         ],
         states={
-       
             APP_AVATAR: [
                 MessageHandler(filters.PHOTO, app_avatar),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, app_avatar)
@@ -1174,8 +1183,6 @@ def main():
             APP_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_reason)],
             APP_FAME_METHOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_fame_method)],
             APP_ACQUAINTANCES: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_acquaintances)],
-            
-           
             COMPLAINT_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_user)],
             COMPLAINT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_reason)],
             COMPLAINT_EVIDENCE: [
@@ -1183,23 +1190,11 @@ def main():
                 MessageHandler(filters.PHOTO, complaint_evidence),
                 MessageHandler(filters.VIDEO, complaint_evidence)
             ],
-            
-          
             TICKET_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ticket_finish)],
-            
-         
             REJECT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, reject_app_finish)],
-            
-        
             ADD_NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_note_finish)],
-            
-        
             ANSWER_COMPLAINT: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_complaint_finish)],
-            
-         
             ANSWER_TICKET: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_ticket_finish)],
-            
-          
             BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_send)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
@@ -1209,7 +1204,6 @@ def main():
     )
     app.add_handler(conv_handler)
 
-   
     app.add_handler(CallbackQueryHandler(view_application, pattern="^view_[0-9]+$"))
     app.add_handler(CallbackQueryHandler(accept_app, pattern="^accept_"))
     app.add_handler(CallbackQueryHandler(view_complaint, pattern="^view_complaint_"))
@@ -1218,7 +1212,6 @@ def main():
     app.add_handler(CallbackQueryHandler(close_ticket, pattern="^close_ticket_"))
     app.add_handler(CallbackQueryHandler(remove_moder, pattern="^removemoder_"))
 
- 
     app.add_handler(MessageHandler(filters.Regex('^🌐 Перейти на сайт$'), site_link))
     app.add_handler(MessageHandler(filters.Regex('^🎯 ArictoSession$'), aricto_session))
     app.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
