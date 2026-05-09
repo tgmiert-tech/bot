@@ -1144,10 +1144,81 @@ def main():
 
     app.add_error_handler(error_handler)
 
+    # Базовые команды
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("cancel", cancel))
     app.add_handler(CommandHandler("addmoder", add_moder_cmd))
 
+    # ОБЩИЙ ConversationHandler для ВСЕХ диалогов
+    conv_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application),
+            MessageHandler(filters.Regex('^⚠️ Пожаловаться$'), complaint_start),
+            MessageHandler(filters.Regex('^🎫 Тикет$'), ticket_start),
+            MessageHandler(filters.Regex('^📨 Рассылка$'), broadcast_start),
+            CallbackQueryHandler(reject_app_start, pattern="^reject_"),
+            CallbackQueryHandler(add_note_start, pattern="^note_"),
+            CallbackQueryHandler(answer_complaint_start, pattern="^answer_complaint_"),
+            CallbackQueryHandler(answer_ticket_start, pattern="^answer_ticket_"),
+        ],
+        states={
+            # Состояния заявки
+            APP_AVATAR: [
+                MessageHandler(filters.PHOTO, app_avatar),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_avatar)
+            ],
+            APP_NICKNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_nickname)],
+            APP_PROJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_project)],
+            APP_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_chat)],
+            APP_KM_YEAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_km_year)],
+            APP_PARTICIPATED: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_participated)],
+            APP_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_reason)],
+            APP_FAME_METHOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_fame_method)],
+            APP_ACQUAINTANCES: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_acquaintances)],
+            
+            # Состояния жалобы
+            COMPLAINT_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_user)],
+            COMPLAINT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_reason)],
+            COMPLAINT_EVIDENCE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_evidence),
+                MessageHandler(filters.PHOTO, complaint_evidence),
+                MessageHandler(filters.VIDEO, complaint_evidence)
+            ],
+            
+            # Состояния тикета
+            TICKET_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ticket_finish)],
+            
+            # Состояния отклонения заявки
+            REJECT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, reject_app_finish)],
+            
+            # Состояния заметки
+            ADD_NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_note_finish)],
+            
+            # Состояния ответа на жалобу
+            ANSWER_COMPLAINT: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_complaint_finish)],
+            
+            # Состояния ответа на тикет
+            ANSWER_TICKET: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_ticket_finish)],
+            
+            # Состояния рассылки
+            BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_send)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        per_chat=False,
+        per_user=True,
+        per_message=False
+    )
+    app.add_handler(conv_handler)
+
+    # Callback handlers
+    app.add_handler(CallbackQueryHandler(view_application, pattern="^view_[0-9]+$"))
+    app.add_handler(CallbackQueryHandler(accept_app, pattern="^accept_"))
+    app.add_handler(CallbackQueryHandler(view_complaint, pattern="^view_complaint_"))
+    app.add_handler(CallbackQueryHandler(close_complaint, pattern="^close_complaint_"))
+    app.add_handler(CallbackQueryHandler(view_ticket, pattern="^view_ticket_"))
+    app.add_handler(CallbackQueryHandler(close_ticket, pattern="^close_ticket_"))
+    app.add_handler(CallbackQueryHandler(remove_moder, pattern="^removemoder_"))
+
+    # Обычные кнопки меню
     app.add_handler(MessageHandler(filters.Regex('^🌐 Перейти на сайт$'), site_link))
     app.add_handler(MessageHandler(filters.Regex('^🎯 ArictoSession$'), aricto_session))
     app.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
@@ -1157,115 +1228,6 @@ def main():
     app.add_handler(MessageHandler(filters.Regex('^🎫 Тикеты$'), show_tickets))
     app.add_handler(MessageHandler(filters.Regex('^📈 Статистика$'), show_stats))
     app.add_handler(MessageHandler(filters.Regex('^👥 Модеры$'), show_moders))
-
-    app.add_handler(ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application)],
-        states={
-            APP_AVATAR: [MessageHandler(filters.PHOTO, app_avatar),
-                        MessageHandler(filters.TEXT & ~filters.COMMAND, app_avatar)],
-            APP_NICKNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_nickname)],
-            APP_PROJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_project)],
-            APP_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_chat)],
-            APP_KM_YEAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_km_year)],
-            APP_PARTICIPATED: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_participated)],
-            APP_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_reason)],
-            APP_FAME_METHOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_fame_method)],
-            APP_ACQUAINTANCES: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_acquaintances)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        block=False,
-        per_message=True
-    ))
-
-
-    app.add_handler(ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex('^⚠️ Пожаловаться$'), complaint_start)],
-        states={
-            COMPLAINT_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_user)],
-            COMPLAINT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_reason)],
-            COMPLAINT_EVIDENCE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_evidence),
-                MessageHandler(filters.PHOTO, complaint_evidence),
-                MessageHandler(filters.VIDEO, complaint_evidence)
-            ],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        block=False,
-        per_message=True
-    ))
-
-
-    app.add_handler(ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex('^🎫 Тикет$'), ticket_start)],
-        states={
-            TICKET_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ticket_finish)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        block=False,
-        per_message=True
-    ))
-
-    
-    app.add_handler(ConversationHandler(
-        entry_points=[CallbackQueryHandler(reject_app_start, pattern="^reject_")],
-        states={
-            REJECT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, reject_app_finish)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        block=False,
-        per_message=True
-    ))
-
- 
-    app.add_handler(ConversationHandler(
-        entry_points=[CallbackQueryHandler(add_note_start, pattern="^note_")],
-        states={
-            ADD_NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_note_finish)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        block=False,
-        per_message=True
-    ))
-
-    app.add_handler(ConversationHandler(
-        entry_points=[CallbackQueryHandler(answer_complaint_start, pattern="^answer_complaint_")],
-        states={
-            ANSWER_COMPLAINT: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_complaint_finish)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        block=False,
-        per_message=True
-    ))
-
-
-    app.add_handler(ConversationHandler(
-        entry_points=[CallbackQueryHandler(answer_ticket_start, pattern="^answer_ticket_")],
-        states={
-            ANSWER_TICKET: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_ticket_finish)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        block=False,
-        per_message=True
-    ))
-
-
-    app.add_handler(ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex('^📨 Рассылка$'), broadcast_start)],
-        states={
-            BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_send)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        block=False,
-        per_message=True
-    ))
-
-    app.add_handler(CallbackQueryHandler(view_application, pattern="^view_[0-9]+$"))
-    app.add_handler(CallbackQueryHandler(accept_app, pattern="^accept_"))
-    app.add_handler(CallbackQueryHandler(view_complaint, pattern="^view_complaint_"))
-    app.add_handler(CallbackQueryHandler(close_complaint, pattern="^close_complaint_"))
-    app.add_handler(CallbackQueryHandler(view_ticket, pattern="^view_ticket_"))
-    app.add_handler(CallbackQueryHandler(close_ticket, pattern="^close_ticket_"))
-    app.add_handler(CallbackQueryHandler(remove_moder, pattern="^removemoder_"))
 
     print("✅ Бот запущен")
     app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
