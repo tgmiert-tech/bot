@@ -13,7 +13,7 @@ OWNER_IDS = [287265398, 7396843811]
 ADMIN_IDS = [287265398, 7396843811]
 MODER_IDS = []
 CHANNEL_ID = -1003911175144
-CHANNEL_LINK = "https://t.me/mirokfame"
+CHANNEL_LINK = "https://t.me/famIist"
 SITE_LINK = "https://релиза пока не было"
 CHECK_SUBSCRIPTION = True
 
