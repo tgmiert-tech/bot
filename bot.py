@@ -1235,9 +1235,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 def main():
-    print("🚀 БОТ ЗАПУСКАЕТСЯ...")
+    print(" БОТ ЗАПУСКАЕТСЯ...")
     
-    application = Application.builder().token(BOT_TOKEN).build()
+      application = Application.builder().token(BOT_TOKEN).build()
     
     application.add_error_handler(error_handler)
     
@@ -1370,8 +1370,10 @@ def main():
         )
         print(f"✅ Бот запущен на Railway")
     else:
-        print("✅ Бот запущен локально")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-
+      print("✅ Бот запущен")
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True
+    )
 if __name__ == '__main__':
     main()
