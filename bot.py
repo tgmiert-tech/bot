@@ -7,7 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKe
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 
-# Конфигурация
+
 BOT_TOKEN = "8226025643:AAHyrVkbV8wFum7tLbAxvhtRq5Sh_-VkH-M"
 OWNER_IDS = [287265398, 7396843811]
 ADMIN_IDS = [287265398, 7396843811]
@@ -19,7 +19,7 @@ CHECK_SUBSCRIPTION = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Состояния
+
 (APP_AVATAR, APP_NICKNAME, APP_PROJECT, APP_CHAT, APP_KM_YEAR,
  APP_PARTICIPATED, APP_REASON, APP_FAME_METHOD, APP_ACQUAINTANCES) = range(9)
 
@@ -950,14 +950,14 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     print("🚀 БОТ ЗАПУСКАЕТСЯ...")
-
+    
     application = Application.builder().token(BOT_TOKEN).build()
-
+    
     application.add_error_handler(error_handler)
-
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("cancel", cancel))
-
+    
     application.add_handler(MessageHandler(filters.Regex('^🌐 Перейти на сайт$'), site_link))
     application.add_handler(MessageHandler(filters.Regex('^🎯 ArictoSession$'), aricto_session))
     application.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
@@ -965,7 +965,7 @@ def main():
     application.add_handler(MessageHandler(filters.Regex('^📜 История$'), show_history))
     application.add_handler(MessageHandler(filters.Regex('^📋 Жалобы$'), show_complaints))
     application.add_handler(MessageHandler(filters.Regex('^🎫 Тикеты$'), show_tickets))
-
+    
     app_conversation = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application)],
         states={
@@ -982,7 +982,7 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     application.add_handler(app_conversation)
-
+    
     complaint_conversation = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^⚠️ Пожаловаться$'), complaint_start)],
         states={
@@ -997,7 +997,7 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     application.add_handler(complaint_conversation)
-
+    
     ticket_conversation = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^🎫 Тикет$'), ticket_start)],
         states={
@@ -1006,7 +1006,7 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     application.add_handler(ticket_conversation)
-
+    
     reject_conversation = ConversationHandler(
         entry_points=[CallbackQueryHandler(reject_app_start, pattern="^reject_")],
         states={
@@ -1015,7 +1015,7 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     application.add_handler(reject_conversation)
-
+    
     broadcast_conversation = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^📨 Рассылка$'), broadcast_start)],
         states={
@@ -1024,14 +1024,14 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     application.add_handler(broadcast_conversation)
-
+    
     application.add_handler(CallbackQueryHandler(view_application, pattern="^view_[0-9]+$"))
     application.add_handler(CallbackQueryHandler(accept_app, pattern="^accept_"))
     application.add_handler(CallbackQueryHandler(view_complaint, pattern="^view_complaint_"))
     application.add_handler(CallbackQueryHandler(close_complaint, pattern="^close_complaint_"))
     application.add_handler(CallbackQueryHandler(view_ticket, pattern="^view_ticket_"))
     application.add_handler(CallbackQueryHandler(close_ticket, pattern="^close_ticket_"))
-
+    
     print("✅ Бот запущен")
     application.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
