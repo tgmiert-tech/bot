@@ -8,7 +8,7 @@ import hmac
 import time
 from datetime import datetime, timedelta
 from collections import defaultdict
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 
@@ -17,18 +17,16 @@ OWNER_IDS = [287265398, 7396843811]
 ADMIN_IDS = [287265398, 7396843811]
 MODER_IDS = []
 CHANNEL_ID = -1003911175144
-CHANNEL_LINK = "https://t.me/famIist"
+CHANNEL_LINK = "https://t.me/mirokfame"
 SITE_LINK = "https://релиза пока не было"
 CHECK_SUBSCRIPTION = True
 
-# Защита от спама и взлома
 BOT_SECRET = "aricToFame_2024_SecureKey_x7K9mP2qL5vN8wR3"
 SPAM_LIMIT = 5
 SPAM_WINDOW = 10
 BLACKLIST_DURATION = timedelta(hours=1)
 user_message_times = defaultdict(list)
 blacklisted_users = {}
-active_conversations = {}
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -40,6 +38,13 @@ logger = logging.getLogger(__name__)
 
 (ADD_NOTE, REJECT_REASON, BROADCAST_MESSAGE, TICKET_QUESTION, 
  ANSWER_TICKET, ANSWER_COMPLAINT) = range(12, 18)
+
+MENU_BUTTONS = [
+    '🌐 Перейти на сайт', '📝 Отправить заявку', '🎯 ArictoSession',
+    '📋 Правила', '⚠️ Пожаловаться', '🎫 Тикет',
+    '📊 Заявки', '📜 История', '📨 Рассылка', '📋 Жалобы',
+    '🎫 Тикеты', '📈 Статистика', '👥 Модеры', '❌ Отмена'
+]
 
 def verify_request(update: Update) -> bool:
     if not update or not update.effective_user:
@@ -58,30 +63,6 @@ def verify_request(update: Update) -> bool:
         return False
     user_message_times[user_id].append(now)
     return True
-
-def generate_csrf_token(user_id: int) -> str:
-    timestamp = str(int(time.time()))
-    message = f"{user_id}:{timestamp}:{BOT_SECRET}"
-    token = hmac.new(BOT_SECRET.encode(), message.encode(), hashlib.sha256).hexdigest()
-    return f"{timestamp}:{token}"
-
-def verify_csrf_token(user_id: int, token: str) -> bool:
-    try:
-        parts = token.split(":")
-        if len(parts) != 2:
-            return False
-        timestamp, hash_part = parts
-        if int(timestamp) < time.time() - 300:
-            return False
-        message = f"{user_id}:{timestamp}:{BOT_SECRET}"
-        expected = hmac.new(BOT_SECRET.encode(), message.encode(), hashlib.sha256).hexdigest()
-        return hmac.compare_digest(expected, hash_part)
-    except:
-        return False
-
-def end_active_conversation(user_id: int):
-    if user_id in active_conversations:
-        del active_conversations[user_id]
 
 class Database:
     def __init__(self, db_file="bot_data.db"):
@@ -391,6 +372,9 @@ def is_moder(user_id):
 def has_access(user_id):
     return is_admin(user_id) or is_moder(user_id)
 
+def get_cancel_keyboard():
+    return ReplyKeyboardMarkup([["❌ Отмена"]], resize_keyboard=True)
+
 def get_user_keyboard():
     return ReplyKeyboardMarkup([
         ["🌐 Перейти на сайт", "📝 Отправить заявку"],
@@ -494,6 +478,16 @@ async def check_subscription(bot, user_id):
     except:
         return False
 
+def get_user_kb(user_id):
+    if is_owner(user_id):
+        return get_owner_keyboard()
+    elif is_admin(user_id):
+        return get_admin_keyboard()
+    elif is_moder(user_id):
+        return get_moder_keyboard()
+    else:
+        return get_user_keyboard()
+
 def format_application(app):
     if not app:
         return "Заявка не найдена"
@@ -550,29 +544,17 @@ def format_ticket(ticket):
 ⏰ <b>Создан:</b> {ticket[6]}
 """
 
-def get_user_keyboard_by_role(user_id):
-    if is_owner(user_id):
-        return get_owner_keyboard()
-    elif is_admin(user_id):
-        return get_admin_keyboard()
-    elif is_moder(user_id):
-        return get_moder_keyboard()
-    else:
-        return get_user_keyboard()
-
-async def cancel_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE, message="❌ Предыдущее действие отменено."):
+async def cancel_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     context.user_data.clear()
-    end_active_conversation(user_id)
-    kb = get_user_keyboard_by_role(user_id)
-    await update.message.reply_text(message, reply_markup=kb)
+    kb = get_user_kb(user_id)
+    await update.message.reply_text("❌ Действие отменено.", reply_markup=kb)
     return ConversationHandler.END
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     username = update.effective_user.username
     db.add_user(user_id, username)
@@ -584,36 +566,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.HTML, disable_web_page_preview=True
         )
         return
+    kb = get_user_kb(user_id)
     if is_owner(user_id):
-        await update.message.reply_text("👑 Панель владельца активирована!", reply_markup=get_owner_keyboard())
+        await update.message.reply_text("👑 Панель владельца активирована!", reply_markup=kb)
     elif is_admin(user_id):
-        await update.message.reply_text("🛡️ Админ-панель активирована!", reply_markup=get_admin_keyboard())
+        await update.message.reply_text("🛡️ Админ-панель активирована!", reply_markup=kb)
     elif is_moder(user_id):
-        await update.message.reply_text("🔧 Панель модератора активирована!", reply_markup=get_moder_keyboard())
+        await update.message.reply_text("🔧 Панель модератора активирована!", reply_markup=kb)
     else:
-        await update.message.reply_text("✨ Добро пожаловать в Aricto Fame!", reply_markup=get_user_keyboard())
+        await update.message.reply_text("✨ Добро пожаловать в Aricto Fame!", reply_markup=kb)
 
 async def site_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
-    user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     await update.message.reply_text(f"🌐 Наш сайт: {SITE_LINK}")
 
 async def aricto_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
-    user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     await update.message.reply_text("🎯 Чтобы попасть в ArictoSession, напишите владельцу: @faymovy")
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
-    user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     await update.message.reply_text(
         "📜 <b>ПРАВИЛА:</b>\n\n"
@@ -629,7 +606,6 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     if not has_access(user_id):
         return
@@ -659,7 +635,6 @@ async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return ConversationHandler.END
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     if not await check_subscription(context.bot, user_id):
         await update.message.reply_text(
@@ -671,63 +646,80 @@ async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if db.get_user_applications_count(user_id) > 0:
         await update.message.reply_text("❌ У вас уже есть активная заявка!")
         return ConversationHandler.END
-    active_conversations[user_id] = 'application'
-    await update.message.reply_text("📸 Отправьте аватарку:")
+    await update.message.reply_text("📸 Отправьте аватарку:", reply_markup=get_cancel_keyboard())
     return APP_AVATAR
 
 async def app_avatar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     if not update.message.photo:
         await update.message.reply_text("❌ Отправьте фото!")
         return APP_AVATAR
     context.user_data['avatar'] = update.message.photo[-1].file_id
-    await update.message.reply_text("✏️ Введите никнейм:")
+    await update.message.reply_text("✏️ Введите никнейм:", reply_markup=get_cancel_keyboard())
     return APP_NICKNAME
 
 async def app_nickname(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     context.user_data['nickname'] = update.message.text
-    await update.message.reply_text("🔗 Введите ссылку на проект:")
+    await update.message.reply_text("🔗 Введите ссылку на проект:", reply_markup=get_cancel_keyboard())
     return APP_PROJECT
 
 async def app_project(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     context.user_data['project'] = update.message.text
-    await update.message.reply_text("💬 Введите ссылку на чат (или '-'):")
+    await update.message.reply_text("💬 Введите ссылку на чат (или '-'):", reply_markup=get_cancel_keyboard())
     return APP_CHAT
 
 async def app_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     text = update.message.text
     context.user_data['chat_link'] = None if text == '-' else text
-    await update.message.reply_text("📅 С какого года в КМ?")
+    await update.message.reply_text("📅 С какого года в КМ?", reply_markup=get_cancel_keyboard())
     return APP_KM_YEAR
 
 async def app_km_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     context.user_data['km_year'] = update.message.text
-    await update.message.reply_text("🎯 Участвовали в ВК/ДС КМ? (да/нет/подробнее)")
+    await update.message.reply_text("🎯 Участвовали в ВК/ДС КМ? (да/нет/подробнее)", reply_markup=get_cancel_keyboard())
     return APP_PARTICIPATED
 
 async def app_participated(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     context.user_data['participated'] = update.message.text
-    await update.message.reply_text("💭 Почему хотите к нам? (или '-'):")
+    await update.message.reply_text("💭 Почему хотите к нам? (или '-'):", reply_markup=get_cancel_keyboard())
     return APP_REASON
 
 async def app_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     text = update.message.text
     context.user_data['reason'] = None if text == '-' else text
-    await update.message.reply_text("📈 Как поднимали фейм?")
+    await update.message.reply_text("📈 Как поднимали фейм?", reply_markup=get_cancel_keyboard())
     return APP_FAME_METHOD
 
 async def app_fame_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     context.user_data['fame_method'] = update.message.text
-    await update.message.reply_text("👥 С кем знакомы?")
+    await update.message.reply_text("👥 С кем знакомы?", reply_markup=get_cancel_keyboard())
     return APP_ACQUAINTANCES
 
 async def app_acquaintances(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     user = update.effective_user
     data = context.user_data
     app_id = db.add_application(user.id, user.username, data['nickname'], data['avatar'],
                                 data['project'], data.get('chat_link'), data['km_year'],
                                 data['participated'], data.get('reason'), data['fame_method'],
                                 update.message.text)
-    kb = get_user_keyboard_by_role(user.id)
+    kb = get_user_kb(user.id)
     await update.message.reply_text(f"✅ <b>Заявка #{app_id} отправлена!</b>\n\nОжидайте рассмотрения.", parse_mode=ParseMode.HTML, reply_markup=kb)
     for uid in ADMIN_IDS + MODER_IDS:
         try:
@@ -735,14 +727,12 @@ async def app_acquaintances(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
     context.user_data.clear()
-    end_active_conversation(user.id)
     return ConversationHandler.END
 
 async def show_applications(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     if not has_access(user_id):
         return
@@ -753,8 +743,6 @@ async def show_applications(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = get_apps_list_keyboard(apps)
     if kb:
         await update.message.reply_text("📊 <b>Активные заявки:</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
-    else:
-        await update.message.reply_text("📭 Нет активных заявок.")
 
 async def view_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -812,17 +800,18 @@ async def reject_app_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         app_id = int(query.data.split("_")[1])
         context.user_data['reject_app_id'] = app_id
-        await query.message.reply_text("❌ Введите причину отклонения:")
+        await query.message.reply_text("❌ Введите причину отклонения:", reply_markup=get_cancel_keyboard())
         return REJECT_REASON
     except:
         return ConversationHandler.END
 
 async def reject_app_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     reason = update.message.text
     admin_id = update.effective_user.id
     app_id = context.user_data.get('reject_app_id')
     context.user_data.clear()
-    end_active_conversation(admin_id)
     if not app_id:
         kb = get_admin_keyboard()
         await update.message.reply_text("❌ Ошибка: заявка не найдена", reply_markup=kb)
@@ -847,20 +836,21 @@ async def add_note_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         app_id = int(query.data.split("_")[1])
         context.user_data['note_app_id'] = app_id
-        await query.message.reply_text("📝 Введите текст заметки:")
+        await query.message.reply_text("📝 Введите текст заметки:", reply_markup=get_cancel_keyboard())
         return ADD_NOTE
     except:
         return ConversationHandler.END
 
 async def add_note_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     note_text = update.message.text
     admin = update.effective_user
     app_id = context.user_data.get('note_app_id')
     context.user_data.clear()
-    end_active_conversation(admin.id)
     if app_id:
         db.add_admin_note(app_id, admin.id, admin.username or "Без username", note_text)
-        kb = get_user_keyboard_by_role(admin.id)
+        kb = get_user_kb(admin.id)
         await update.message.reply_text(f"✅ Заметка добавлена к заявке #{app_id}", reply_markup=kb)
     return ConversationHandler.END
 
@@ -868,7 +858,6 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     if not has_access(user_id):
         return
@@ -893,27 +882,21 @@ async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return ConversationHandler.END
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     if not is_admin(user_id):
         await update.message.reply_text("⛔ Нет прав!")
         return ConversationHandler.END
-    active_conversations[user_id] = 'broadcast'
-    await update.message.reply_text("📨 Введите текст рассылки (или /cancel):")
+    await update.message.reply_text("📨 Введите текст рассылки:", reply_markup=get_cancel_keyboard())
     return BROADCAST_MESSAGE
 
 async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     message_text = update.message.text
-    if message_text == '/cancel':
-        context.user_data.clear()
-        end_active_conversation(update.effective_user.id)
-        await update.message.reply_text("❌ Отменена", reply_markup=get_admin_keyboard())
-        return ConversationHandler.END
     users = db.get_all_users()
     if not users:
-        await update.message.reply_text("❌ Нет пользователей", reply_markup=get_admin_keyboard())
         context.user_data.clear()
-        end_active_conversation(update.effective_user.id)
+        await update.message.reply_text("❌ Нет пользователей", reply_markup=get_admin_keyboard())
         return ConversationHandler.END
     status_msg = await update.message.reply_text(f"📨 Рассылка на {len(users)} пользователей...")
     success, failed = 0, 0
@@ -927,14 +910,12 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await status_msg.edit_text(f"📊 <b>Рассылка завершена!</b>\n\n✅ {success}\n❌ {failed}", parse_mode=ParseMode.HTML)
     await update.message.reply_text("✅ Готово", reply_markup=get_admin_keyboard())
     context.user_data.clear()
-    end_active_conversation(update.effective_user.id)
     return ConversationHandler.END
 
 async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return ConversationHandler.END
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     if not await check_subscription(context.bot, user_id):
         await update.message.reply_text(
@@ -943,27 +924,31 @@ async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.HTML, disable_web_page_preview=True
         )
         return ConversationHandler.END
-    active_conversations[user_id] = 'complaint'
-    await update.message.reply_text("⚠️ Укажите username или ссылку на нарушителя:")
+    await update.message.reply_text("⚠️ Укажите username или ссылку на нарушителя:", reply_markup=get_cancel_keyboard())
     return COMPLAINT_USER
 
 async def complaint_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     context.user_data['complaint_on'] = update.message.text
-    await update.message.reply_text("📝 Опишите причину:")
+    await update.message.reply_text("📝 Опишите причину:", reply_markup=get_cancel_keyboard())
     return COMPLAINT_REASON
 
 async def complaint_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     context.user_data['complaint_reason'] = update.message.text
-    await update.message.reply_text("📎 Прикрепите доказательства (текст/фото/видео):")
+    await update.message.reply_text("📎 Прикрепите доказательства (текст/фото/видео):", reply_markup=get_cancel_keyboard())
     return COMPLAINT_EVIDENCE
 
 async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     user_id = update.effective_user.id
     username = update.effective_user.username
     if 'complaint_on' not in context.user_data:
         context.user_data.clear()
-        end_active_conversation(user_id)
-        kb = get_user_keyboard_by_role(user_id)
+        kb = get_user_kb(user_id)
         await update.message.reply_text("❌ Ошибка", reply_markup=kb)
         return ConversationHandler.END
     evidence = "Не предоставлены"
@@ -979,17 +964,15 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await context.bot.send_message(uid, f"⚠️ <b>НОВАЯ ЖАЛОБА #{complaint_id}</b>\n👤 От: @{username or 'нет'}\n👥 Нарушитель: {context.user_data['complaint_on']}\n📝 Причина: {context.user_data['complaint_reason']}", parse_mode=ParseMode.HTML)
         except:
             pass
-    kb = get_user_keyboard_by_role(user_id)
+    kb = get_user_kb(user_id)
     await update.message.reply_text(f"✅ Жалоба #{complaint_id} отправлена!", reply_markup=kb)
     context.user_data.clear()
-    end_active_conversation(user_id)
     return ConversationHandler.END
 
 async def show_complaints(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     if not has_access(user_id):
         return
@@ -1000,8 +983,6 @@ async def show_complaints(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = get_complaints_list_keyboard(complaints)
     if kb:
         await update.message.reply_text("📋 <b>Активные жалобы:</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
-    else:
-        await update.message.reply_text("📭 Нет активных жалоб.")
 
 async def view_complaint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1053,19 +1034,20 @@ async def answer_complaint_start(update: Update, context: ContextTypes.DEFAULT_T
     try:
         complaint_id = int(query.data.split("_")[2])
         context.user_data['answer_complaint_id'] = complaint_id
-        await query.message.reply_text("✏️ Введите ответ на жалобу:")
+        await query.message.reply_text("✏️ Введите ответ на жалобу:", reply_markup=get_cancel_keyboard())
         return ANSWER_COMPLAINT
     except:
         return ConversationHandler.END
 
 async def answer_complaint_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     response = update.message.text
     admin = update.effective_user
     complaint_id = context.user_data.get('answer_complaint_id')
     context.user_data.clear()
-    end_active_conversation(admin.id)
     if not complaint_id:
-        kb = get_user_keyboard_by_role(admin.id)
+        kb = get_user_kb(admin.id)
         await update.message.reply_text("❌ Ошибка", reply_markup=kb)
         return ConversationHandler.END
     complaint = db.get_complaint_by_id(complaint_id)
@@ -1075,7 +1057,7 @@ async def answer_complaint_finish(update: Update, context: ContextTypes.DEFAULT_
             await context.bot.send_message(complaint[1], f"📋 <b>Ответ на вашу жалобу #{complaint_id}</b>\n\n📝 {response}\n\n👤 Ответил: @{admin.username or 'admin'}", parse_mode=ParseMode.HTML)
         except:
             pass
-    kb = get_user_keyboard_by_role(admin.id)
+    kb = get_user_kb(admin.id)
     await update.message.reply_text(f"✅ Ответ на жалобу #{complaint_id} отправлен!", reply_markup=kb)
     return ConversationHandler.END
 
@@ -1083,7 +1065,6 @@ async def ticket_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return ConversationHandler.END
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     if not await check_subscription(context.bot, user_id):
         await update.message.reply_text(
@@ -1092,11 +1073,12 @@ async def ticket_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.HTML, disable_web_page_preview=True
         )
         return ConversationHandler.END
-    active_conversations[user_id] = 'ticket'
-    await update.message.reply_text("🎫 Задайте вопрос:")
+    await update.message.reply_text("🎫 Задайте вопрос:", reply_markup=get_cancel_keyboard())
     return TICKET_QUESTION
 
 async def ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     question = update.message.text
     user = update.effective_user
     ticket_id = db.add_ticket(user.id, user.username, question)
@@ -1105,17 +1087,15 @@ async def ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(uid, f"🎫 <b>НОВЫЙ ТИКЕТ #{ticket_id}</b>\n👤 От: @{user.username or 'нет'}\n❓ Вопрос: {question}", parse_mode=ParseMode.HTML)
         except:
             pass
-    kb = get_user_keyboard_by_role(user.id)
+    kb = get_user_kb(user.id)
     await update.message.reply_text(f"✅ Тикет #{ticket_id} отправлен!", reply_markup=kb)
     context.user_data.clear()
-    end_active_conversation(user.id)
     return ConversationHandler.END
 
 async def show_tickets(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     if not has_access(user_id):
         return
@@ -1126,8 +1106,6 @@ async def show_tickets(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = get_tickets_list_keyboard(tickets)
     if kb:
         await update.message.reply_text("🎫 <b>Открытые тикеты:</b>", parse_mode=ParseMode.HTML, reply_markup=kb)
-    else:
-        await update.message.reply_text("📭 Нет открытых тикетов.")
 
 async def view_ticket(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1179,19 +1157,20 @@ async def answer_ticket_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         ticket_id = int(query.data.split("_")[2])
         context.user_data['answer_ticket_id'] = ticket_id
-        await query.message.reply_text("✏️ Введите ответ на тикет:")
+        await query.message.reply_text("✏️ Введите ответ на тикет:", reply_markup=get_cancel_keyboard())
         return ANSWER_TICKET
     except:
         return ConversationHandler.END
 
 async def answer_ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text and update.message.text == '❌ Отмена':
+        return await cancel_action(update, context)
     response = update.message.text
     admin = update.effective_user
     ticket_id = context.user_data.get('answer_ticket_id')
     context.user_data.clear()
-    end_active_conversation(admin.id)
     if not ticket_id:
-        kb = get_user_keyboard_by_role(admin.id)
+        kb = get_user_kb(admin.id)
         await update.message.reply_text("❌ Ошибка", reply_markup=kb)
         return ConversationHandler.END
     ticket = db.get_ticket_by_id(ticket_id)
@@ -1201,7 +1180,7 @@ async def answer_ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYP
             await context.bot.send_message(ticket[1], f"🎫 <b>Ответ на ваш тикет #{ticket_id}</b>\n\n📝 {response}\n\n👤 Ответил: @{admin.username or 'admin'}", parse_mode=ParseMode.HTML)
         except:
             pass
-    kb = get_user_keyboard_by_role(admin.id)
+    kb = get_user_kb(admin.id)
     await update.message.reply_text(f"✅ Ответ на тикет #{ticket_id} отправлен!", reply_markup=kb)
     return ConversationHandler.END
 
@@ -1209,7 +1188,6 @@ async def show_moders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    end_active_conversation(user_id)
     context.user_data.clear()
     if not is_owner(user_id):
         return
@@ -1255,46 +1233,17 @@ async def remove_moder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    context.user_data.clear()
-    end_active_conversation(user_id)
-    kb = get_user_keyboard_by_role(user_id)
-    await update.message.reply_text("❌ Действие отменено.", reply_markup=kb)
-    return ConversationHandler.END
-
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not verify_request(update):
-        return
-    user_id = update.effective_user.id
-    text = update.message.text
-    
-    if user_id in active_conversations:
-        context.user_data.clear()
-        end_active_conversation(user_id)
-        kb = get_user_keyboard_by_role(user_id)
-        
-        menu_triggers = [
-            '🌐 Перейти на сайт', '📝 Отправить заявку', '🎯 ArictoSession',
-            '📋 Правила', '⚠️ Пожаловаться', '🎫 Тикет',
-            '📊 Заявки', '📜 История', '📨 Рассылка', '📋 Жалобы',
-            '🎫 Тикеты', '📈 Статистика', '👥 Модеры'
-        ]
-        
-        if text in menu_triggers:
-            await update.message.reply_text("⚠️ Предыдущее действие отменено. Выполняю новую команду.", reply_markup=kb)
+    return await cancel_action(update, context)
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Ошибка: {context.error}")
     logger.error(traceback.format_exc())
     try:
         if update and update.effective_user:
-            user_id = update.effective_user.id
             context.user_data.clear()
-            end_active_conversation(user_id)
         if update and update.effective_message:
-            kb = get_user_keyboard()
-            if update.effective_user:
-                kb = get_user_keyboard_by_role(update.effective_user.id)
+            user_id = update.effective_user.id if update.effective_user else None
+            kb = get_user_kb(user_id) if user_id else get_user_keyboard()
             await update.effective_message.reply_text("❌ Произошла ошибка. Попробуйте снова.", reply_markup=kb)
     except:
         pass
@@ -1369,11 +1318,6 @@ def main():
     app.add_handler(MessageHandler(filters.Regex('^🎫 Тикеты$'), show_tickets))
     app.add_handler(MessageHandler(filters.Regex('^📈 Статистика$'), show_stats))
     app.add_handler(MessageHandler(filters.Regex('^👥 Модеры$'), show_moders))
-
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & filters.Regex('^(🌐 Перейти на сайт|📝 Отправить заявку|🎯 ArictoSession|📋 Правила|⚠️ Пожаловаться|🎫 Тикет|📊 Заявки|📜 История|📨 Рассылка|📋 Жалобы|🎫 Тикеты|📈 Статистика|👥 Модеры)$'),
-        menu_handler
-    ))
 
     print("✅ Бот запущен")
     app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
