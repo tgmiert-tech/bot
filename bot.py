@@ -7,7 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKe
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 
-# Конфигурация
+
 BOT_TOKEN = "8226025643:AAHyrVkbV8wFum7tLbAxvhtRq5Sh_-VkH-M"
 OWNER_IDS = [287265398, 7396843811]
 ADMIN_IDS = [287265398, 7396843811]
@@ -20,7 +20,7 @@ CHECK_SUBSCRIPTION = True
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Состояния
+
 (APP_AVATAR, APP_NICKNAME, APP_PROJECT, APP_CHAT, APP_KM_YEAR,
  APP_PARTICIPATED, APP_REASON, APP_FAME_METHOD, APP_ACQUAINTANCES) = range(9)
 
@@ -1144,11 +1144,11 @@ def main():
 
     app.add_error_handler(error_handler)
 
-    # Базовые команды
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("addmoder", add_moder_cmd))
 
-    # ОБЩИЙ ConversationHandler для ВСЕХ диалогов
+  
     conv_handler = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application),
@@ -1161,7 +1161,7 @@ def main():
             CallbackQueryHandler(answer_ticket_start, pattern="^answer_ticket_"),
         ],
         states={
-            # Состояния заявки
+       
             APP_AVATAR: [
                 MessageHandler(filters.PHOTO, app_avatar),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, app_avatar)
@@ -1175,7 +1175,7 @@ def main():
             APP_FAME_METHOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_fame_method)],
             APP_ACQUAINTANCES: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_acquaintances)],
             
-            # Состояния жалобы
+           
             COMPLAINT_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_user)],
             COMPLAINT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_reason)],
             COMPLAINT_EVIDENCE: [
@@ -1184,22 +1184,22 @@ def main():
                 MessageHandler(filters.VIDEO, complaint_evidence)
             ],
             
-            # Состояния тикета
+          
             TICKET_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ticket_finish)],
             
-            # Состояния отклонения заявки
+         
             REJECT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, reject_app_finish)],
             
-            # Состояния заметки
+        
             ADD_NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_note_finish)],
             
-            # Состояния ответа на жалобу
+        
             ANSWER_COMPLAINT: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_complaint_finish)],
             
-            # Состояния ответа на тикет
+         
             ANSWER_TICKET: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_ticket_finish)],
             
-            # Состояния рассылки
+          
             BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_send)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
@@ -1209,7 +1209,7 @@ def main():
     )
     app.add_handler(conv_handler)
 
-    # Callback handlers
+   
     app.add_handler(CallbackQueryHandler(view_application, pattern="^view_[0-9]+$"))
     app.add_handler(CallbackQueryHandler(accept_app, pattern="^accept_"))
     app.add_handler(CallbackQueryHandler(view_complaint, pattern="^view_complaint_"))
@@ -1218,7 +1218,7 @@ def main():
     app.add_handler(CallbackQueryHandler(close_ticket, pattern="^close_ticket_"))
     app.add_handler(CallbackQueryHandler(remove_moder, pattern="^removemoder_"))
 
-    # Обычные кнопки меню
+ 
     app.add_handler(MessageHandler(filters.Regex('^🌐 Перейти на сайт$'), site_link))
     app.add_handler(MessageHandler(filters.Regex('^🎯 ArictoSession$'), aricto_session))
     app.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
