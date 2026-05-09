@@ -1161,7 +1161,8 @@ def main():
     app.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application)],
         states={
-            APP_AVATAR: [MessageHandler(filters.PHOTO, app_avatar)],
+            APP_AVATAR: [MessageHandler(filters.PHOTO, app_avatar),
+                        MessageHandler(filters.TEXT & ~filters.COMMAND, app_avatar)],
             APP_NICKNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_nickname)],
             APP_PROJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_project)],
             APP_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_chat)],
@@ -1172,8 +1173,10 @@ def main():
             APP_ACQUAINTANCES: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_acquaintances)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        block=False
+        block=False,
+        per_message=True
     ))
+
 
     app.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^⚠️ Пожаловаться$'), complaint_start)],
@@ -1187,49 +1190,73 @@ def main():
             ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
-        block=False
+        block=False,
+        per_message=True
     ))
+
 
     app.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^🎫 Тикет$'), ticket_start)],
-        states={TICKET_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ticket_finish)]},
+        states={
+            TICKET_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ticket_finish)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
-        block=False
+        block=False,
+        per_message=True
     ))
 
+    
     app.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(reject_app_start, pattern="^reject_")],
-        states={REJECT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, reject_app_finish)]},
+        states={
+            REJECT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, reject_app_finish)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
-        block=False
+        block=False,
+        per_message=True
     ))
 
+ 
     app.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(add_note_start, pattern="^note_")],
-        states={ADD_NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_note_finish)]},
+        states={
+            ADD_NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_note_finish)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
-        block=False
+        block=False,
+        per_message=True
     ))
 
     app.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(answer_complaint_start, pattern="^answer_complaint_")],
-        states={ANSWER_COMPLAINT: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_complaint_finish)]},
+        states={
+            ANSWER_COMPLAINT: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_complaint_finish)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
-        block=False
+        block=False,
+        per_message=True
     ))
+
 
     app.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(answer_ticket_start, pattern="^answer_ticket_")],
-        states={ANSWER_TICKET: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_ticket_finish)]},
+        states={
+            ANSWER_TICKET: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_ticket_finish)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
-        block=False
+        block=False,
+        per_message=True
     ))
+
 
     app.add_handler(ConversationHandler(
         entry_points=[MessageHandler(filters.Regex('^📨 Рассылка$'), broadcast_start)],
-        states={BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_send)]},
+        states={
+            BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_send)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
-        block=False
+        block=False,
+        per_message=True
     ))
 
     app.add_handler(CallbackQueryHandler(view_application, pattern="^view_[0-9]+$"))
