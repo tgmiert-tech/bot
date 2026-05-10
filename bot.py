@@ -46,7 +46,6 @@ MENU_BUTTONS = [
     '🎫 Тикеты', '📈 Статистика', '👥 Модеры', '❌ Отмена'
 ]
 
-# Словарь для отслеживания активных операций пользователей
 active_operations = {}
 
 def verify_request(update: Update) -> bool:
@@ -640,9 +639,9 @@ async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return ConversationHandler.END
     user_id = update.effective_user.id
-    # Отменяем предыдущую операцию
+
     await cancel_operation(user_id, context)
-    # Устанавливаем новую операцию
+  
     active_operations[user_id] = 'application'
     
     if not await check_subscription(context.bot, user_id):
@@ -1269,7 +1268,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         pass
 
-# Фильтр для кнопок меню, которые запускают новые операции
+
 MENU_OPERATIONS = ['📝 Отправить заявку', '⚠️ Пожаловаться', '🎫 Тикет', '📨 Рассылка']
 
 def is_menu_operation(text):
@@ -1299,7 +1298,7 @@ def main():
             APP_AVATAR: [
                 MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
                 MessageHandler(filters.PHOTO, app_avatar),
-                # Принимаем все текстовые сообщения, включая кнопки меню
+           
                 MessageHandler(filters.TEXT & ~filters.COMMAND, app_avatar)
             ],
             APP_NICKNAME: [
@@ -1377,11 +1376,11 @@ def main():
         per_chat=False,
         per_user=True,
         per_message=False,
-        allow_reentry=True  # ВАЖНО: позволяет перезапускать разговор
+        allow_reentry=True  
     )
     app.add_handler(conv_handler)
 
-    # Callback handlers
+
     app.add_handler(CallbackQueryHandler(view_application, pattern="^view_[0-9]+$"))
     app.add_handler(CallbackQueryHandler(accept_app, pattern="^accept_"))
     app.add_handler(CallbackQueryHandler(view_complaint, pattern="^view_complaint_"))
@@ -1390,7 +1389,7 @@ def main():
     app.add_handler(CallbackQueryHandler(close_ticket, pattern="^close_ticket_"))
     app.add_handler(CallbackQueryHandler(remove_moder, pattern="^removemoder_"))
 
-    # Простые кнопки меню (не операции)
+
     app.add_handler(MessageHandler(filters.Regex('^🌐 Перейти на сайт$'), site_link))
     app.add_handler(MessageHandler(filters.Regex('^🎯 ArictoSession$'), aricto_session))
     app.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
