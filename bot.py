@@ -39,12 +39,17 @@ logger = logging.getLogger(__name__)
 (ADD_NOTE, REJECT_REASON, BROADCAST_MESSAGE, TICKET_QUESTION, 
  ANSWER_TICKET, ANSWER_COMPLAINT) = range(12, 18)
 
+# Список всех кнопок меню для фильтрации
 MENU_BUTTONS = [
     '🌐 Перейти на сайт', '📝 Отправить заявку', '🎯 ArictoSession',
     '📋 Правила', '⚠️ Пожаловаться', '🎫 Тикет',
     '📊 Заявки', '📜 История', '📨 Рассылка', '📋 Жалобы',
     '🎫 Тикеты', '📈 Статистика', '👥 Модеры', '❌ Отмена'
 ]
+
+def is_menu_button(text):
+    """Проверяет, является ли текст кнопкой меню"""
+    return text in MENU_BUTTONS
 
 def verify_request(update: Update) -> bool:
     if not update or not update.effective_user:
@@ -544,6 +549,49 @@ def format_ticket(ticket):
 ⏰ <b>Создан:</b> {ticket[6]}
 """
 
+async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик кнопок меню, который сбрасывает любые активные операции"""
+    if not verify_request(update):
+        return ConversationHandler.END
+    
+    user_id = update.effective_user.id
+    text = update.message.text
+    
+    # Очищаем контекст перед выполнением нового действия
+    context.user_data.clear()
+    
+    # Выполняем соответствующее действие
+    if text == '🌐 Перейти на сайт':
+        await site_link(update, context)
+    elif text == '📝 Отправить заявку':
+        return await start_application(update, context)
+    elif text == '🎯 ArictoSession':
+        await aricto_session(update, context)
+    elif text == '📋 Правила':
+        await rules(update, context)
+    elif text == '⚠️ Пожаловаться':
+        return await complaint_start(update, context)
+    elif text == '🎫 Тикет':
+        return await ticket_start(update, context)
+    elif text == '📊 Заявки':
+        await show_applications(update, context)
+    elif text == '📜 История':
+        await show_history(update, context)
+    elif text == '📨 Рассылка':
+        return await broadcast_start(update, context)
+    elif text == '📋 Жалобы':
+        await show_complaints(update, context)
+    elif text == '🎫 Тикеты':
+        await show_tickets(update, context)
+    elif text == '📈 Статистика':
+        await show_stats(update, context)
+    elif text == '👥 Модеры':
+        await show_moders(update, context)
+    elif text == '❌ Отмена':
+        return await cancel_action(update, context)
+    
+    return ConversationHandler.END
+
 async def cancel_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     context.user_data.clear()
@@ -579,19 +627,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def site_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
-    context.user_data.clear()
     await update.message.reply_text(f"🌐 Наш сайт: {SITE_LINK}")
 
 async def aricto_session(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
-    context.user_data.clear()
     await update.message.reply_text("🎯 Чтобы попасть в ArictoSession, напишите владельцу: @faymovy")
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
-    context.user_data.clear()
     await update.message.reply_text(
         "📜 <b>ПРАВИЛА:</b>\n\n"
         "1. Заполняйте анкету честно\n"
@@ -606,7 +651,6 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    context.user_data.clear()
     if not has_access(user_id):
         return
     stats = db.get_stats()
@@ -733,7 +777,6 @@ async def show_applications(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    context.user_data.clear()
     if not has_access(user_id):
         return
     apps = db.get_pending_applications()
@@ -813,7 +856,7 @@ async def reject_app_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     app_id = context.user_data.get('reject_app_id')
     context.user_data.clear()
     if not app_id:
-        kb = get_admin_keyboard()
+        kb = get_user_kb(admin_id)
         await update.message.reply_text("❌ Ошибка: заявка не найдена", reply_markup=kb)
         return ConversationHandler.END
     app = db.get_application_by_id(app_id)
@@ -823,7 +866,7 @@ async def reject_app_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(app[1], f"❌ <b>Заявка #{app_id} ОТКЛОНЕНА</b>\n\n📝 Причина: {reason}", parse_mode=ParseMode.HTML)
         except:
             pass
-    kb = get_admin_keyboard()
+    kb = get_user_kb(admin_id)
     await update.message.reply_text(f"❌ Заявка #{app_id} отклонена.", reply_markup=kb)
     return ConversationHandler.END
 
@@ -858,7 +901,6 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    context.user_data.clear()
     if not has_access(user_id):
         return
     history = db.get_history(30)
@@ -894,21 +936,22 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await cancel_action(update, context)
     message_text = update.message.text
     users = db.get_all_users()
+    user_id = update.effective_user.id
     if not users:
         context.user_data.clear()
-        await update.message.reply_text("❌ Нет пользователей", reply_markup=get_admin_keyboard())
+        await update.message.reply_text("❌ Нет пользователей", reply_markup=get_user_kb(user_id))
         return ConversationHandler.END
     status_msg = await update.message.reply_text(f"📨 Рассылка на {len(users)} пользователей...")
     success, failed = 0, 0
-    for user_id in users:
+    for uid in users:
         try:
-            await context.bot.send_message(user_id, f"📢 <b>Сообщение от администрации:</b>\n\n{message_text}", parse_mode=ParseMode.HTML)
+            await context.bot.send_message(uid, f"📢 <b>Сообщение от администрации:</b>\n\n{message_text}", parse_mode=ParseMode.HTML)
             success += 1
         except:
             failed += 1
         await asyncio.sleep(0.03)
     await status_msg.edit_text(f"📊 <b>Рассылка завершена!</b>\n\n✅ {success}\n❌ {failed}", parse_mode=ParseMode.HTML)
-    await update.message.reply_text("✅ Готово", reply_markup=get_admin_keyboard())
+    await update.message.reply_text("✅ Готово", reply_markup=get_user_kb(user_id))
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -973,7 +1016,6 @@ async def show_complaints(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    context.user_data.clear()
     if not has_access(user_id):
         return
     complaints = db.get_pending_complaints()
@@ -1096,7 +1138,6 @@ async def show_tickets(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    context.user_data.clear()
     if not has_access(user_id):
         return
     tickets = db.get_open_tickets()
@@ -1188,7 +1229,6 @@ async def show_moders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return
     user_id = update.effective_user.id
-    context.user_data.clear()
     if not is_owner(user_id):
         return
     moders = db.get_all_moders()
@@ -1253,15 +1293,17 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_error_handler(error_handler)
 
+    # Базовые команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("addmoder", add_moder_cmd))
 
+    # Создаем ConversationHandler с фильтрацией кнопок меню в состояниях
     conv_handler = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application),
-            MessageHandler(filters.Regex('^⚠️ Пожаловаться$'), complaint_start),
-            MessageHandler(filters.Regex('^🎫 Тикет$'), ticket_start),
-            MessageHandler(filters.Regex('^📨 Рассылка$'), broadcast_start),
+            MessageHandler(filters.Regex('^📝 Отправить заявку$'), handle_menu_button),
+            MessageHandler(filters.Regex('^⚠️ Пожаловаться$'), handle_menu_button),
+            MessageHandler(filters.Regex('^🎫 Тикет$'), handle_menu_button),
+            MessageHandler(filters.Regex('^📨 Рассылка$'), handle_menu_button),
             CallbackQueryHandler(reject_app_start, pattern="^reject_"),
             CallbackQueryHandler(add_note_start, pattern="^note_"),
             CallbackQueryHandler(answer_complaint_start, pattern="^answer_complaint_"),
@@ -1269,38 +1311,90 @@ def main():
         ],
         states={
             APP_AVATAR: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
                 MessageHandler(filters.PHOTO, app_avatar),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, app_avatar)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_avatar)  # Отлавливаем ВСЕ текстовые сообщения
             ],
-            APP_NICKNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_nickname)],
-            APP_PROJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_project)],
-            APP_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_chat)],
-            APP_KM_YEAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_km_year)],
-            APP_PARTICIPATED: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_participated)],
-            APP_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_reason)],
-            APP_FAME_METHOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_fame_method)],
-            APP_ACQUAINTANCES: [MessageHandler(filters.TEXT & ~filters.COMMAND, app_acquaintances)],
-            COMPLAINT_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_user)],
-            COMPLAINT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_reason)],
+            APP_NICKNAME: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_nickname)
+            ],
+            APP_PROJECT: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_project)
+            ],
+            APP_CHAT: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_chat)
+            ],
+            APP_KM_YEAR: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_km_year)
+            ],
+            APP_PARTICIPATED: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_participated)
+            ],
+            APP_REASON: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_reason)
+            ],
+            APP_FAME_METHOD: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_fame_method)
+            ],
+            APP_ACQUAINTANCES: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_acquaintances)
+            ],
+            COMPLAINT_USER: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_user)
+            ],
+            COMPLAINT_REASON: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_reason)
+            ],
             COMPLAINT_EVIDENCE: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, complaint_evidence),
                 MessageHandler(filters.PHOTO, complaint_evidence),
                 MessageHandler(filters.VIDEO, complaint_evidence)
             ],
-            TICKET_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ticket_finish)],
-            REJECT_REASON: [MessageHandler(filters.TEXT & ~filters.COMMAND, reject_app_finish)],
-            ADD_NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_note_finish)],
-            ANSWER_COMPLAINT: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_complaint_finish)],
-            ANSWER_TICKET: [MessageHandler(filters.TEXT & ~filters.COMMAND, answer_ticket_finish)],
-            BROADCAST_MESSAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_send)],
+            TICKET_QUESTION: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, ticket_finish)
+            ],
+            REJECT_REASON: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, reject_app_finish)
+            ],
+            ADD_NOTE: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, add_note_finish)
+            ],
+            ANSWER_COMPLAINT: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, answer_complaint_finish)
+            ],
+            ANSWER_TICKET: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, answer_ticket_finish)
+            ],
+            BROADCAST_MESSAGE: [
+                MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_send)
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
         per_chat=False,
         per_user=True,
-        per_message=False
+        per_message=False,
+        allow_reentry=True  # ВАЖНО! Позволяет перезапускать ConversationHandler
     )
     app.add_handler(conv_handler)
 
+    # Callback handlers
     app.add_handler(CallbackQueryHandler(view_application, pattern="^view_[0-9]+$"))
     app.add_handler(CallbackQueryHandler(accept_app, pattern="^accept_"))
     app.add_handler(CallbackQueryHandler(view_complaint, pattern="^view_complaint_"))
@@ -1309,15 +1403,11 @@ def main():
     app.add_handler(CallbackQueryHandler(close_ticket, pattern="^close_ticket_"))
     app.add_handler(CallbackQueryHandler(remove_moder, pattern="^removemoder_"))
 
-    app.add_handler(MessageHandler(filters.Regex('^🌐 Перейти на сайт$'), site_link))
-    app.add_handler(MessageHandler(filters.Regex('^🎯 ArictoSession$'), aricto_session))
-    app.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
-    app.add_handler(MessageHandler(filters.Regex('^📊 Заявки$'), show_applications))
-    app.add_handler(MessageHandler(filters.Regex('^📜 История$'), show_history))
-    app.add_handler(MessageHandler(filters.Regex('^📋 Жалобы$'), show_complaints))
-    app.add_handler(MessageHandler(filters.Regex('^🎫 Тикеты$'), show_tickets))
-    app.add_handler(MessageHandler(filters.Regex('^📈 Статистика$'), show_stats))
-    app.add_handler(MessageHandler(filters.Regex('^👥 Модеры$'), show_moders))
+    # Обработчики кнопок меню (работают всегда)
+    app.add_handler(MessageHandler(
+        filters.Regex('^🌐 Перейти на сайт$|^🎯 ArictoSession$|^📋 Правила$|^📊 Заявки$|^📜 История$|^📋 Жалобы$|^🎫 Тикеты$|^📈 Статистика$|^👥 Модеры$'), 
+        handle_menu_button
+    ))
 
     print("✅ Бот запущен")
     app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
