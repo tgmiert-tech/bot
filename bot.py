@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 (ADD_NOTE, REJECT_REASON, BROADCAST_MESSAGE, TICKET_QUESTION, 
  ANSWER_TICKET, ANSWER_COMPLAINT) = range(12, 18)
 
-# Список всех кнопок меню для фильтрации
 MENU_BUTTONS = [
     '🌐 Перейти на сайт', '📝 Отправить заявку', '🎯 ArictoSession',
     '📋 Правила', '⚠️ Пожаловаться', '🎫 Тикет',
@@ -47,9 +46,8 @@ MENU_BUTTONS = [
     '🎫 Тикеты', '📈 Статистика', '👥 Модеры', '❌ Отмена'
 ]
 
-def is_menu_button(text):
-    """Проверяет, является ли текст кнопкой меню"""
-    return text in MENU_BUTTONS
+# Словарь для отслеживания активных операций пользователей
+active_operations = {}
 
 def verify_request(update: Update) -> bool:
     if not update or not update.effective_user:
@@ -549,52 +547,15 @@ def format_ticket(ticket):
 ⏰ <b>Создан:</b> {ticket[6]}
 """
 
-async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик кнопок меню, который сбрасывает любые активные операции"""
-    if not verify_request(update):
-        return ConversationHandler.END
-    
-    user_id = update.effective_user.id
-    text = update.message.text
-    
-    # Очищаем контекст перед выполнением нового действия
+async def cancel_operation(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Отменяет текущую операцию пользователя"""
+    if user_id in active_operations:
+        del active_operations[user_id]
     context.user_data.clear()
-    
-    # Выполняем соответствующее действие
-    if text == '🌐 Перейти на сайт':
-        await site_link(update, context)
-    elif text == '📝 Отправить заявку':
-        return await start_application(update, context)
-    elif text == '🎯 ArictoSession':
-        await aricto_session(update, context)
-    elif text == '📋 Правила':
-        await rules(update, context)
-    elif text == '⚠️ Пожаловаться':
-        return await complaint_start(update, context)
-    elif text == '🎫 Тикет':
-        return await ticket_start(update, context)
-    elif text == '📊 Заявки':
-        await show_applications(update, context)
-    elif text == '📜 История':
-        await show_history(update, context)
-    elif text == '📨 Рассылка':
-        return await broadcast_start(update, context)
-    elif text == '📋 Жалобы':
-        await show_complaints(update, context)
-    elif text == '🎫 Тикеты':
-        await show_tickets(update, context)
-    elif text == '📈 Статистика':
-        await show_stats(update, context)
-    elif text == '👥 Модеры':
-        await show_moders(update, context)
-    elif text == '❌ Отмена':
-        return await cancel_action(update, context)
-    
-    return ConversationHandler.END
 
 async def cancel_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    context.user_data.clear()
+    await cancel_operation(user_id, context)
     kb = get_user_kb(user_id)
     await update.message.reply_text("❌ Действие отменено.", reply_markup=kb)
     return ConversationHandler.END
@@ -679,16 +640,22 @@ async def start_application(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return ConversationHandler.END
     user_id = update.effective_user.id
-    context.user_data.clear()
+    # Отменяем предыдущую операцию
+    await cancel_operation(user_id, context)
+    # Устанавливаем новую операцию
+    active_operations[user_id] = 'application'
+    
     if not await check_subscription(context.bot, user_id):
         await update.message.reply_text(
             f"❌ <b>Для подачи заявки подпишитесь на канал!</b>\n\n"
             f"👉 <a href='{CHANNEL_LINK}'>ПОДПИСАТЬСЯ</a>",
             parse_mode=ParseMode.HTML, disable_web_page_preview=True
         )
+        await cancel_operation(user_id, context)
         return ConversationHandler.END
     if db.get_user_applications_count(user_id) > 0:
         await update.message.reply_text("❌ У вас уже есть активная заявка!")
+        await cancel_operation(user_id, context)
         return ConversationHandler.END
     await update.message.reply_text("📸 Отправьте аватарку:", reply_markup=get_cancel_keyboard())
     return APP_AVATAR
@@ -763,6 +730,7 @@ async def app_acquaintances(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 data['project'], data.get('chat_link'), data['km_year'],
                                 data['participated'], data.get('reason'), data['fame_method'],
                                 update.message.text)
+    await cancel_operation(user.id, context)
     kb = get_user_kb(user.id)
     await update.message.reply_text(f"✅ <b>Заявка #{app_id} отправлена!</b>\n\nОжидайте рассмотрения.", parse_mode=ParseMode.HTML, reply_markup=kb)
     for uid in ADMIN_IDS + MODER_IDS:
@@ -770,7 +738,6 @@ async def app_acquaintances(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(uid, f"🔔 <b>Новая заявка #{app_id}</b>\n👤 От: {data['nickname']}\n📁 Проект: {data['project']}", parse_mode=ParseMode.HTML)
         except:
             pass
-    context.user_data.clear()
     return ConversationHandler.END
 
 async def show_applications(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -843,6 +810,7 @@ async def reject_app_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         app_id = int(query.data.split("_")[1])
         context.user_data['reject_app_id'] = app_id
+        active_operations[query.from_user.id] = 'reject'
         await query.message.reply_text("❌ Введите причину отклонения:", reply_markup=get_cancel_keyboard())
         return REJECT_REASON
     except:
@@ -854,7 +822,7 @@ async def reject_app_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reason = update.message.text
     admin_id = update.effective_user.id
     app_id = context.user_data.get('reject_app_id')
-    context.user_data.clear()
+    await cancel_operation(admin_id, context)
     if not app_id:
         kb = get_user_kb(admin_id)
         await update.message.reply_text("❌ Ошибка: заявка не найдена", reply_markup=kb)
@@ -879,6 +847,7 @@ async def add_note_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         app_id = int(query.data.split("_")[1])
         context.user_data['note_app_id'] = app_id
+        active_operations[query.from_user.id] = 'note'
         await query.message.reply_text("📝 Введите текст заметки:", reply_markup=get_cancel_keyboard())
         return ADD_NOTE
     except:
@@ -890,11 +859,14 @@ async def add_note_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     note_text = update.message.text
     admin = update.effective_user
     app_id = context.user_data.get('note_app_id')
-    context.user_data.clear()
+    await cancel_operation(admin.id, context)
     if app_id:
         db.add_admin_note(app_id, admin.id, admin.username or "Без username", note_text)
         kb = get_user_kb(admin.id)
         await update.message.reply_text(f"✅ Заметка добавлена к заявке #{app_id}", reply_markup=kb)
+    else:
+        kb = get_user_kb(admin.id)
+        await update.message.reply_text("❌ Ошибка: заявка не найдена", reply_markup=kb)
     return ConversationHandler.END
 
 async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -924,10 +896,11 @@ async def broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return ConversationHandler.END
     user_id = update.effective_user.id
-    context.user_data.clear()
     if not is_admin(user_id):
         await update.message.reply_text("⛔ Нет прав!")
         return ConversationHandler.END
+    await cancel_operation(user_id, context)
+    active_operations[user_id] = 'broadcast'
     await update.message.reply_text("📨 Введите текст рассылки:", reply_markup=get_cancel_keyboard())
     return BROADCAST_MESSAGE
 
@@ -935,10 +908,10 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text and update.message.text == '❌ Отмена':
         return await cancel_action(update, context)
     message_text = update.message.text
-    users = db.get_all_users()
     user_id = update.effective_user.id
+    users = db.get_all_users()
     if not users:
-        context.user_data.clear()
+        await cancel_operation(user_id, context)
         await update.message.reply_text("❌ Нет пользователей", reply_markup=get_user_kb(user_id))
         return ConversationHandler.END
     status_msg = await update.message.reply_text(f"📨 Рассылка на {len(users)} пользователей...")
@@ -951,21 +924,24 @@ async def broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
             failed += 1
         await asyncio.sleep(0.03)
     await status_msg.edit_text(f"📊 <b>Рассылка завершена!</b>\n\n✅ {success}\n❌ {failed}", parse_mode=ParseMode.HTML)
+    await cancel_operation(user_id, context)
     await update.message.reply_text("✅ Готово", reply_markup=get_user_kb(user_id))
-    context.user_data.clear()
     return ConversationHandler.END
 
 async def complaint_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return ConversationHandler.END
     user_id = update.effective_user.id
-    context.user_data.clear()
+    await cancel_operation(user_id, context)
+    active_operations[user_id] = 'complaint'
+    
     if not await check_subscription(context.bot, user_id):
         await update.message.reply_text(
             f"❌ <b>Для подачи жалобы подпишитесь на канал!</b>\n\n"
             f"👉 <a href='{CHANNEL_LINK}'>ПОДПИСАТЬСЯ</a>",
             parse_mode=ParseMode.HTML, disable_web_page_preview=True
         )
+        await cancel_operation(user_id, context)
         return ConversationHandler.END
     await update.message.reply_text("⚠️ Укажите username или ссылку на нарушителя:", reply_markup=get_cancel_keyboard())
     return COMPLAINT_USER
@@ -990,7 +966,7 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = update.effective_user.id
     username = update.effective_user.username
     if 'complaint_on' not in context.user_data:
-        context.user_data.clear()
+        await cancel_operation(user_id, context)
         kb = get_user_kb(user_id)
         await update.message.reply_text("❌ Ошибка", reply_markup=kb)
         return ConversationHandler.END
@@ -1007,9 +983,9 @@ async def complaint_evidence(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await context.bot.send_message(uid, f"⚠️ <b>НОВАЯ ЖАЛОБА #{complaint_id}</b>\n👤 От: @{username or 'нет'}\n👥 Нарушитель: {context.user_data['complaint_on']}\n📝 Причина: {context.user_data['complaint_reason']}", parse_mode=ParseMode.HTML)
         except:
             pass
+    await cancel_operation(user_id, context)
     kb = get_user_kb(user_id)
     await update.message.reply_text(f"✅ Жалоба #{complaint_id} отправлена!", reply_markup=kb)
-    context.user_data.clear()
     return ConversationHandler.END
 
 async def show_complaints(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1076,6 +1052,7 @@ async def answer_complaint_start(update: Update, context: ContextTypes.DEFAULT_T
     try:
         complaint_id = int(query.data.split("_")[2])
         context.user_data['answer_complaint_id'] = complaint_id
+        active_operations[query.from_user.id] = 'answer_complaint'
         await query.message.reply_text("✏️ Введите ответ на жалобу:", reply_markup=get_cancel_keyboard())
         return ANSWER_COMPLAINT
     except:
@@ -1087,7 +1064,7 @@ async def answer_complaint_finish(update: Update, context: ContextTypes.DEFAULT_
     response = update.message.text
     admin = update.effective_user
     complaint_id = context.user_data.get('answer_complaint_id')
-    context.user_data.clear()
+    await cancel_operation(admin.id, context)
     if not complaint_id:
         kb = get_user_kb(admin.id)
         await update.message.reply_text("❌ Ошибка", reply_markup=kb)
@@ -1107,13 +1084,16 @@ async def ticket_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not verify_request(update):
         return ConversationHandler.END
     user_id = update.effective_user.id
-    context.user_data.clear()
+    await cancel_operation(user_id, context)
+    active_operations[user_id] = 'ticket'
+    
     if not await check_subscription(context.bot, user_id):
         await update.message.reply_text(
             f"❌ <b>Для создания тикета подпишитесь на канал!</b>\n\n"
             f"👉 <a href='{CHANNEL_LINK}'>ПОДПИСАТЬСЯ</a>",
             parse_mode=ParseMode.HTML, disable_web_page_preview=True
         )
+        await cancel_operation(user_id, context)
         return ConversationHandler.END
     await update.message.reply_text("🎫 Задайте вопрос:", reply_markup=get_cancel_keyboard())
     return TICKET_QUESTION
@@ -1129,9 +1109,9 @@ async def ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(uid, f"🎫 <b>НОВЫЙ ТИКЕТ #{ticket_id}</b>\n👤 От: @{user.username or 'нет'}\n❓ Вопрос: {question}", parse_mode=ParseMode.HTML)
         except:
             pass
+    await cancel_operation(user.id, context)
     kb = get_user_kb(user.id)
     await update.message.reply_text(f"✅ Тикет #{ticket_id} отправлен!", reply_markup=kb)
-    context.user_data.clear()
     return ConversationHandler.END
 
 async def show_tickets(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1198,6 +1178,7 @@ async def answer_ticket_start(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         ticket_id = int(query.data.split("_")[2])
         context.user_data['answer_ticket_id'] = ticket_id
+        active_operations[query.from_user.id] = 'answer_ticket'
         await query.message.reply_text("✏️ Введите ответ на тикет:", reply_markup=get_cancel_keyboard())
         return ANSWER_TICKET
     except:
@@ -1209,7 +1190,7 @@ async def answer_ticket_finish(update: Update, context: ContextTypes.DEFAULT_TYP
     response = update.message.text
     admin = update.effective_user
     ticket_id = context.user_data.get('answer_ticket_id')
-    context.user_data.clear()
+    await cancel_operation(admin.id, context)
     if not ticket_id:
         kb = get_user_kb(admin.id)
         await update.message.reply_text("❌ Ошибка", reply_markup=kb)
@@ -1280,7 +1261,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(traceback.format_exc())
     try:
         if update and update.effective_user:
-            context.user_data.clear()
+            await cancel_operation(update.effective_user.id, context)
         if update and update.effective_message:
             user_id = update.effective_user.id if update.effective_user else None
             kb = get_user_kb(user_id) if user_id else get_user_keyboard()
@@ -1288,22 +1269,27 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         pass
 
+# Фильтр для кнопок меню, которые запускают новые операции
+MENU_OPERATIONS = ['📝 Отправить заявку', '⚠️ Пожаловаться', '🎫 Тикет', '📨 Рассылка']
+
+def is_menu_operation(text):
+    """Проверяет, запускает ли кнопка новую операцию"""
+    return text in MENU_OPERATIONS
+
 def main():
     print("🚀 БОТ ЗАПУСКАЕТСЯ...")
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_error_handler(error_handler)
 
-    # Базовые команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("addmoder", add_moder_cmd))
 
-    # Создаем ConversationHandler с фильтрацией кнопок меню в состояниях
     conv_handler = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex('^📝 Отправить заявку$'), handle_menu_button),
-            MessageHandler(filters.Regex('^⚠️ Пожаловаться$'), handle_menu_button),
-            MessageHandler(filters.Regex('^🎫 Тикет$'), handle_menu_button),
-            MessageHandler(filters.Regex('^📨 Рассылка$'), handle_menu_button),
+            MessageHandler(filters.Regex('^📝 Отправить заявку$'), start_application),
+            MessageHandler(filters.Regex('^⚠️ Пожаловаться$'), complaint_start),
+            MessageHandler(filters.Regex('^🎫 Тикет$'), ticket_start),
+            MessageHandler(filters.Regex('^📨 Рассылка$'), broadcast_start),
             CallbackQueryHandler(reject_app_start, pattern="^reject_"),
             CallbackQueryHandler(add_note_start, pattern="^note_"),
             CallbackQueryHandler(answer_complaint_start, pattern="^answer_complaint_"),
@@ -1313,7 +1299,8 @@ def main():
             APP_AVATAR: [
                 MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
                 MessageHandler(filters.PHOTO, app_avatar),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, app_avatar)  # Отлавливаем ВСЕ текстовые сообщения
+                # Принимаем все текстовые сообщения, включая кнопки меню
+                MessageHandler(filters.TEXT & ~filters.COMMAND, app_avatar)
             ],
             APP_NICKNAME: [
                 MessageHandler(filters.Regex('^❌ Отмена$'), cancel),
@@ -1390,7 +1377,7 @@ def main():
         per_chat=False,
         per_user=True,
         per_message=False,
-        allow_reentry=True  # ВАЖНО! Позволяет перезапускать ConversationHandler
+        allow_reentry=True  # ВАЖНО: позволяет перезапускать разговор
     )
     app.add_handler(conv_handler)
 
@@ -1403,11 +1390,16 @@ def main():
     app.add_handler(CallbackQueryHandler(close_ticket, pattern="^close_ticket_"))
     app.add_handler(CallbackQueryHandler(remove_moder, pattern="^removemoder_"))
 
-    # Обработчики кнопок меню (работают всегда)
-    app.add_handler(MessageHandler(
-        filters.Regex('^🌐 Перейти на сайт$|^🎯 ArictoSession$|^📋 Правила$|^📊 Заявки$|^📜 История$|^📋 Жалобы$|^🎫 Тикеты$|^📈 Статистика$|^👥 Модеры$'), 
-        handle_menu_button
-    ))
+    # Простые кнопки меню (не операции)
+    app.add_handler(MessageHandler(filters.Regex('^🌐 Перейти на сайт$'), site_link))
+    app.add_handler(MessageHandler(filters.Regex('^🎯 ArictoSession$'), aricto_session))
+    app.add_handler(MessageHandler(filters.Regex('^📋 Правила$'), rules))
+    app.add_handler(MessageHandler(filters.Regex('^📊 Заявки$'), show_applications))
+    app.add_handler(MessageHandler(filters.Regex('^📜 История$'), show_history))
+    app.add_handler(MessageHandler(filters.Regex('^📋 Жалобы$'), show_complaints))
+    app.add_handler(MessageHandler(filters.Regex('^🎫 Тикеты$'), show_tickets))
+    app.add_handler(MessageHandler(filters.Regex('^📈 Статистика$'), show_stats))
+    app.add_handler(MessageHandler(filters.Regex('^👥 Модеры$'), show_moders))
 
     print("✅ Бот запущен")
     app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
